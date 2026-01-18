@@ -1,0 +1,101 @@
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String?
+  googleId     String?  @unique
+  name         String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  isActive     Boolean  @default(true)
+
+  tenantUsers  TenantUser[]
+  jobsCreated  Job[]    @relation("JobsCreatedBy")
+  jobStatusChanges JobStatusHistory[] @relation("JobStatusChangedBy")
+}
+
+model Tenant {
+  id        String       @id @default(uuid())
+  name      String       @unique
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  tenantUsers TenantUser[]
+  jobs        Job[]
+}
+
+model TenantUser {
+  id        String   @id @default(uuid())
+  userId    String
+  role      String
+  tenantId  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@unique([tenantId, userId])
+}
+
+enum ApplicationStatus {
+  INTERESTED
+  APPLIED
+  INTERVIEWING
+  OFFER
+  REJECTED
+  GHOSTED
+}
+
+model Job {
+  id              String             @id @default(uuid())
+  tenantId        String
+  createdByUserId String
+
+  company         String
+  role            String
+  status          ApplicationStatus  @default(INTERESTED)
+  dateApplied     DateTime
+
+  description     String?
+  location        String?
+  salary          String?
+  link            String?
+  notes           String?
+
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  tenant          Tenant             @relation(fields: [tenantId], references: [id])
+  createdByUser   User               @relation("JobsCreatedBy", fields: [createdByUserId], references: [id])
+  statusHistory   JobStatusHistory[]
+  
+  @@index([tenantId])
+  @@index([createdByUserId])
+  @@index([status])
+  @@index([dateApplied])
+}
+
+
+model JobStatusHistory {
+  id              String             @id @default(uuid())
+  jobId           String
+  status          ApplicationStatus
+  notes           String?
+  changedAt       DateTime
+  changedByUserId String?
+
+  job             Job                @relation(fields: [jobId], references: [id])
+  changedByUser   User?              @relation("JobStatusChangedBy", fields: [changedByUserId], references: [id])
+
+  @@index([jobId])
+  @@index([status])
+  @@index([changedAt])
+}
