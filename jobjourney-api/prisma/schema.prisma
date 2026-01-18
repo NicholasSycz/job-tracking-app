@@ -7,18 +7,34 @@ generator client {
 }
 
 model User {
-  id           String   @id @default(uuid())
-  email        String   @unique
-  passwordHash String?
-  googleId     String?  @unique
-  name         String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  isActive     Boolean  @default(true)
+  id              String   @id @default(uuid())
+  email           String   @unique
+  passwordHash    String?
+  googleId        String?  @unique
+  name            String?
+  applicationGoal Int      @default(25)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  isActive        Boolean  @default(true)
 
   tenantUsers  TenantUser[]
   jobsCreated  Job[]    @relation("JobsCreatedBy")
   jobStatusChanges JobStatusHistory[] @relation("JobStatusChangedBy")
+  passwordResetTokens PasswordResetToken[]
+}
+
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  usedAt    DateTime?
+
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@index([token])
+  @@index([userId])
 }
 
 model Tenant {

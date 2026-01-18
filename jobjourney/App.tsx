@@ -10,19 +10,27 @@ import {
   Loader2,
   LogOut,
   User as UserIcon,
+  Settings,
 } from "lucide-react";
 import { JobApplication, ApplicationStatus, ViewType, AuthUser } from "./types";
 import DashboardView from "./components/DashboardView";
 import ApplicationsView from "./components/ApplicationsView";
 import AnalyticsView from "./components/AnalyticsView";
+import SettingsView from "./components/SettingsView";
 import LoginView from "./components/LoginView";
 import JobModal from "./components/JobModal";
+import ConfirmModal from "./components/ConfirmModal";
 import { apiService } from "./services/apiService";
+import { useToast } from "./contexts/ToastContext";
+import { API_BASE_URL } from "./config";
 
 const App: React.FC = () => {
+  const { showSuccess, showError } = useToast();
   const [user, setUser] = useState<AuthUser | null>(null);
   const [applications, setApplications] = useState<JobApplication[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
   const [darkMode, setDarkMode] = useState<boolean>(() => {
     return (
       localStorage.getItem("theme") === "dark" ||
@@ -33,8 +41,22 @@ const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<ViewType>("dashboard");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingJob, setEditingJob] = useState<JobApplication | undefined>();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [applicationGoal, setApplicationGoal] = useState(25);
 
-  const API_BASE_URL = "http://localhost:4000";
+  // Filter applications based on search query
+  const filteredApplications = applications.filter((app) => {
+    if (!searchQuery.trim()) return true;
+    const query = searchQuery.toLowerCase();
+    return (
+      app.company.toLowerCase().includes(query) ||
+      app.role.toLowerCase().includes(query) ||
+      app.location?.toLowerCase().includes(query) ||
+      app.notes?.toLowerCase().includes(query) ||
+      app.description?.toLowerCase().includes(query)
+    );
+  });
 
   // Handle Login
   const handleLogin = (authenticatedUser: AuthUser) => {
@@ -45,6 +67,7 @@ const App: React.FC = () => {
 
   const handleLogout = () => {
     localStorage.removeItem("auth_token");
+    localStorage.removeItem("tenant_id");
     setUser(null);
     setApplications([]);
   };
@@ -52,13 +75,57 @@ const App: React.FC = () => {
   // Fetch from Node.js/Prisma Backend on mount if user is set
   const loadData = async () => {
     try {
-      const data = await apiService.fetchApplications();
-      setApplications(data);
+      const [applicationsData, settingsData] = await Promise.all([
+        apiService.fetchApplications(),
+        fetchSettings(),
+      ]);
+      setApplications(applicationsData);
+      if (settingsData?.applicationGoal) {
+        setApplicationGoal(settingsData.applicationGoal);
+      }
     } catch (err) {
       console.error("Backend connection failed.", err);
+      showError("Connection Failed", "Unable to load your applications. Please try again.");
       setApplications([]);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const fetchSettings = async () => {
+    try {
+      const token = localStorage.getItem("auth_token");
+      const res = await fetch(`${API_BASE_URL}/api/settings`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (err) {
+      console.error("Failed to fetch settings:", err);
+    }
+    return null;
+  };
+
+  const updateGoal = async (goal: number) => {
+    try {
+      const token = localStorage.getItem("auth_token");
+      const res = await fetch(`${API_BASE_URL}/api/settings`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ applicationGoal: goal }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setApplicationGoal(data.applicationGoal);
+        showSuccess("Goal Updated", `Your new goal is ${goal} applications.`);
+      }
+    } catch (err) {
+      console.error("Failed to update goal:", err);
+      showError("Update Failed", "Unable to save your goal.");
     }
   };
 
@@ -74,6 +141,30 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const restoreSession = async () => {
+      // Check for OAuth callback parameters in URL
+      const urlParams = new URLSearchParams(window.location.search);
+      const oauthToken = urlParams.get("token");
+      const oauthTenantId = urlParams.get("tenantId");
+      const oauthError = urlParams.get("error");
+
+      // Clear URL parameters
+      if (oauthToken || oauthError) {
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+
+      // Handle OAuth error
+      if (oauthError) {
+        console.error("OAuth error:", oauthError);
+        showError("Authentication Failed", oauthError);
+        return;
+      }
+
+      // Handle OAuth success
+      if (oauthToken && oauthTenantId) {
+        localStorage.setItem("auth_token", oauthToken);
+        localStorage.setItem("tenant_id", oauthTenantId);
+      }
+
       const token = localStorage.getItem("auth_token");
       if (!token) return;
 
@@ -89,6 +180,7 @@ const App: React.FC = () => {
         if (!res.ok) {
           // token invalid/expired
           localStorage.removeItem("auth_token");
+          localStorage.removeItem("tenant_id");
           setUser(null);
           return;
         }
@@ -96,11 +188,16 @@ const App: React.FC = () => {
         const data = await res.json();
         setUser(data.user as AuthUser);
 
+        // Store tenantId from session restore
+        if (data.tenantId) {
+          localStorage.setItem("tenant_id", data.tenantId);
+        }
+
         // now fetch the real data
         await loadData();
       } catch (err) {
         console.error("Failed to restore session:", err);
-        // optional: keep token, but user stays logged out if backend unreachable
+        showError("Session Error", "Unable to restore your session. Please log in again.");
       } finally {
         setIsLoading(false);
       }
@@ -110,16 +207,23 @@ const App: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleAddApplication = async (newApp: JobApplication) => {
+  const handleAddApplication = async (newApp: Omit<JobApplication, "id">) => {
+    setIsSaving(true);
     try {
       const savedApp = await apiService.createApplication(newApp);
       setApplications((prev) => [savedApp, ...prev]);
+      showSuccess("Application Added", `Added ${newApp.role} at ${newApp.company}`);
     } catch (err) {
       console.error("Failed to save to backend", err);
+      showError("Save Failed", "Unable to save the application. Please try again.");
+      throw err; // Re-throw so modal knows save failed
+    } finally {
+      setIsSaving(false);
     }
   };
 
   const handleUpdateApplication = async (updatedApp: JobApplication) => {
+    setIsSaving(true);
     try {
       const savedApp = await apiService.updateApplication(
         updatedApp.id,
@@ -128,17 +232,63 @@ const App: React.FC = () => {
       setApplications((prev) =>
         prev.map((app) => (app.id === savedApp.id ? savedApp : app))
       );
+      showSuccess("Application Updated", `Updated ${updatedApp.role} at ${updatedApp.company}`);
     } catch (err) {
       console.error("Failed to update backend", err);
+      showError("Update Failed", "Unable to update the application. Please try again.");
+      throw err; // Re-throw so modal knows save failed
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSaveApplication = async (job: JobApplication | Omit<JobApplication, "id">) => {
+    if ("id" in job && job.id) {
+      await handleUpdateApplication(job as JobApplication);
+    } else {
+      await handleAddApplication(job as Omit<JobApplication, "id">);
     }
   };
 
   const handleDeleteApplication = async (id: string) => {
+    setDeletingIds((prev) => new Set(prev).add(id));
     try {
       await apiService.deleteApplication(id);
       setApplications((prev) => prev.filter((app) => app.id !== id));
+      showSuccess("Application Deleted", "The application has been removed.");
     } catch (err) {
       console.error("Failed to delete from backend", err);
+      showError("Delete Failed", "Unable to delete the application. Please try again.");
+    } finally {
+      setDeletingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }
+  };
+
+  const handleBulkDelete = async (ids: string[]) => {
+    try {
+      const result = await apiService.bulkDeleteApplications(ids);
+      setApplications((prev) => prev.filter((app) => !ids.includes(app.id)));
+      showSuccess("Applications Deleted", `Deleted ${result.deleted} application${result.deleted !== 1 ? 's' : ''}.`);
+    } catch (err) {
+      console.error("Failed to bulk delete", err);
+      showError("Delete Failed", "Unable to delete the selected applications. Please try again.");
+    }
+  };
+
+  const handleBulkStatusUpdate = async (ids: string[], status: ApplicationStatus) => {
+    try {
+      const result = await apiService.bulkUpdateStatus(ids, status);
+      setApplications((prev) =>
+        prev.map((app) => (ids.includes(app.id) ? { ...app, status } : app))
+      );
+      showSuccess("Status Updated", `Updated ${result.updated} application${result.updated !== 1 ? 's' : ''} to ${status}.`);
+    } catch (err) {
+      console.error("Failed to bulk update status", err);
+      showError("Update Failed", "Unable to update the selected applications. Please try again.");
     }
   };
 
@@ -150,6 +300,12 @@ const App: React.FC = () => {
   const openEditModal = (job: JobApplication) => {
     setEditingJob(job);
     setIsModalOpen(true);
+  };
+
+  const handleUpdateUser = (updates: Partial<AuthUser>) => {
+    if (user) {
+      setUser({ ...user, ...updates });
+    }
   };
 
   if (!user) {
@@ -231,6 +387,24 @@ const App: React.FC = () => {
               />
               <span className="text-sm">Analytics</span>
             </button>
+            <button
+              onClick={() => setCurrentView("settings")}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all ${
+                currentView === "settings"
+                  ? "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 font-bold"
+                  : "text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900/50"
+              }`}
+            >
+              <Settings
+                size={20}
+                className={
+                  currentView === "settings"
+                    ? "text-emerald-600 dark:text-emerald-400"
+                    : ""
+                }
+              />
+              <span className="text-sm">Settings</span>
+            </button>
           </nav>
         </div>
 
@@ -276,7 +450,7 @@ const App: React.FC = () => {
           </button>
 
           <button
-            onClick={handleLogout}
+            onClick={() => setShowLogoutConfirm(true)}
             className="w-full flex items-center justify-center gap-2 text-rose-500 dark:text-rose-400/80 hover:bg-rose-50 dark:hover:bg-rose-900/20 py-2.5 rounded-xl transition-all font-bold text-xs uppercase tracking-widest"
           >
             <LogOut size={16} />
@@ -304,10 +478,15 @@ const App: React.FC = () => {
               <input
                 type="text"
                 placeholder="Search your journey..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-9 pr-4 py-2 bg-slate-100 dark:bg-slate-800 border-transparent focus:bg-white dark:focus:bg-slate-950 focus:border-emerald-300 dark:focus:border-emerald-700 focus:ring-4 focus:ring-emerald-100 dark:focus:ring-emerald-900/20 rounded-full text-xs outline-none transition-all w-64 text-slate-800 dark:text-slate-200"
               />
             </div>
-            <button className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-emerald-600 transition-colors">
+            <button
+              onClick={() => setCurrentView("settings")}
+              className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-emerald-600 transition-colors"
+            >
               <UserIcon size={18} />
             </button>
           </div>
@@ -328,19 +507,32 @@ const App: React.FC = () => {
             <>
               {currentView === "dashboard" && (
                 <DashboardView
-                  applications={applications}
+                  applications={filteredApplications}
                   onEdit={openEditModal}
+                  applicationGoal={applicationGoal}
                 />
               )}
               {currentView === "applications" && (
                 <ApplicationsView
-                  applications={applications}
+                  applications={filteredApplications}
                   onEdit={openEditModal}
                   onDelete={handleDeleteApplication}
+                  onBulkDelete={handleBulkDelete}
+                  onBulkStatusUpdate={handleBulkStatusUpdate}
+                  deletingIds={deletingIds}
                 />
               )}
               {currentView === "analytics" && (
-                <AnalyticsView applications={applications} />
+                <AnalyticsView applications={filteredApplications} />
+              )}
+              {currentView === "settings" && (
+                <SettingsView
+                  user={user}
+                  onUpdateUser={handleUpdateUser}
+                  onLogout={handleLogout}
+                  applicationGoal={applicationGoal}
+                  onUpdateGoal={updateGoal}
+                />
               )}
             </>
           )}
@@ -350,8 +542,23 @@ const App: React.FC = () => {
       <JobModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        onSave={editingJob ? handleUpdateApplication : handleAddApplication}
+        onSave={handleSaveApplication}
         editingJob={editingJob}
+        isSaving={isSaving}
+      />
+
+      <ConfirmModal
+        isOpen={showLogoutConfirm}
+        title="Sign Out"
+        message="Are you sure you want to sign out? You'll need to log in again to access your applications."
+        confirmLabel="Sign Out"
+        cancelLabel="Stay"
+        variant="danger"
+        onConfirm={() => {
+          setShowLogoutConfirm(false);
+          handleLogout();
+        }}
+        onCancel={() => setShowLogoutConfirm(false)}
       />
     </div>
   );

@@ -1,16 +1,17 @@
-
 import React, { useState, useEffect } from 'react';
-import { X, Save, Link2, MapPin, DollarSign, Calendar, Briefcase } from 'lucide-react';
+import { X, Save, Link2, MapPin, DollarSign, Calendar, Briefcase, Loader2 } from 'lucide-react';
 import { JobApplication, ApplicationStatus } from '../types';
+import StatusHistory from './StatusHistory';
 
 interface Props {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (job: JobApplication) => void;
+  onSave: (job: JobApplication | Omit<JobApplication, "id">) => Promise<void>;
   editingJob?: JobApplication;
+  isSaving?: boolean;
 }
 
-const JobModal: React.FC<Props> = ({ isOpen, onClose, onSave, editingJob }) => {
+const JobModal: React.FC<Props> = ({ isOpen, onClose, onSave, editingJob, isSaving = false }) => {
   const [formData, setFormData] = useState<Partial<JobApplication>>({
     company: '',
     role: '',
@@ -43,13 +44,35 @@ const JobModal: React.FC<Props> = ({ isOpen, onClose, onSave, editingJob }) => {
 
   if (!isOpen) return null;
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!formData.company || !formData.role) return;
-    onSave({
-      ...formData as JobApplication,
-      id: editingJob?.id || Math.random().toString(36).substr(2, 9)
-    });
-    onClose();
+
+    try {
+      if (editingJob) {
+        // Editing existing job - include the id
+        await onSave({
+          ...formData,
+          id: editingJob.id,
+        } as JobApplication);
+      } else {
+        // Creating new job - let server generate id
+        await onSave({
+          company: formData.company!,
+          role: formData.role!,
+          status: formData.status || ApplicationStatus.INTERESTED,
+          dateApplied: formData.dateApplied || new Date().toISOString().split('T')[0],
+          description: formData.description || '',
+          location: formData.location || '',
+          salary: formData.salary,
+          link: formData.link,
+          notes: formData.notes,
+        });
+      }
+      // Only close if save was successful
+      onClose();
+    } catch {
+      // Error is already handled by parent - don't close modal on error
+    }
   };
 
   return (
@@ -173,9 +196,9 @@ const JobModal: React.FC<Props> = ({ isOpen, onClose, onSave, editingJob }) => {
             />
           </div>
 
-          <div className="space-y-2 pb-12">
+          <div className="space-y-2">
             <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em]">Application Notes</label>
-            <textarea 
+            <textarea
               rows={3}
               value={formData.notes}
               onChange={e => setFormData(p => ({ ...p, notes: e.target.value }))}
@@ -183,22 +206,30 @@ const JobModal: React.FC<Props> = ({ isOpen, onClose, onSave, editingJob }) => {
               className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:border-emerald-500 dark:focus:border-emerald-500 rounded-2xl outline-none transition-all resize-none text-slate-800 dark:text-slate-200 text-sm leading-relaxed"
             />
           </div>
+
+          {/* Status History - only show when editing */}
+          {editingJob && (
+            <StatusHistory applicationId={editingJob.id} isOpen={isOpen} />
+          )}
+
+          <div className="pb-12" />
         </div>
 
         <div className="sticky bottom-0 bg-white dark:bg-slate-950 border-t border-slate-100 dark:border-slate-800 p-6 flex gap-4 transition-colors">
-          <button 
+          <button
             onClick={onClose}
-            className="flex-1 py-3 rounded-2xl border border-slate-200 dark:border-slate-800 font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors"
+            disabled={isSaving}
+            className="flex-1 py-3 rounded-2xl border border-slate-200 dark:border-slate-800 font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors disabled:opacity-50"
           >
             Cancel
           </button>
-          <button 
+          <button
             onClick={handleSave}
-            disabled={!formData.company || !formData.role}
+            disabled={!formData.company || !formData.role || isSaving}
             className="flex-2 flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-12 py-3 rounded-2xl font-bold transition-all disabled:opacity-50 shadow-lg shadow-emerald-200 dark:shadow-none"
           >
-            <Save size={20} />
-            Save Details
+            {isSaving ? <Loader2 size={20} className="animate-spin" /> : <Save size={20} />}
+            {isSaving ? 'Saving...' : 'Save Details'}
           </button>
         </div>
       </div>

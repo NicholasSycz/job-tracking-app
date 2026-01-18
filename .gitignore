@@ -1,0 +1,77 @@
+# =========================
+# JobJourney (Vite React) + JobJourney API (Express/TS + Prisma)
+# Monorepo .gitignore
+# =========================
+
+# --- OS / editor ---
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+Desktop.ini
+
+# VS Code / JetBrains / misc editors
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.idea/
+*.iml
+
+# --- Node / JS / TS ---
+node_modules/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Runtime / cache
+.cache/
+.tmp/
+.temp/
+.eslintcache
+
+# --- Vite / React build output ---
+# Vite dev cache
+**/.vite/
+
+# Production builds
+**/dist/
+**/build/
+
+# --- TypeScript ---
+*.tsbuildinfo
+
+# --- Env / secrets ---
+.env
+.env.*
+.env.*.local
+
+# Keep examples/templates
+!.env.example
+!.env.template
+
+# --- Prisma ---
+# Generated client lives in node_modules; do not commit local DB files
+**/*.db
+**/*.db-journal
+
+# Prisma engines/download cache (rarely checked in, but safe to ignore)
+**/.prisma/
+
+# --- Coverage / test artifacts ---
+coverage/
+.nyc_output/
+
+# --- Package manager lockfiles (choose what you use) ---
+# If you want to commit lockfiles, remove these lines.
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml

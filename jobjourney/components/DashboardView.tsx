@@ -6,9 +6,10 @@ import { Briefcase, Clock, CheckCircle2, XCircle, ChevronRight } from 'lucide-re
 interface Props {
   applications: JobApplication[];
   onEdit: (job: JobApplication) => void;
+  applicationGoal?: number;
 }
 
-const DashboardView: React.FC<Props> = ({ applications, onEdit }) => {
+const DashboardView: React.FC<Props> = ({ applications, onEdit, applicationGoal = 25 }) => {
   const stats = {
     total: applications.length,
     active: applications.filter(a => a.status === ApplicationStatus.APPLIED || a.status === ApplicationStatus.INTERVIEWING).length,
@@ -73,11 +74,11 @@ const DashboardView: React.FC<Props> = ({ applications, onEdit }) => {
              <div className="bg-white/10 p-4 rounded-xl backdrop-blur-sm border border-white/10">
                 <p className="text-xs uppercase tracking-wider font-bold opacity-70 mb-1">Career Goal Sync</p>
                 <div className="flex justify-between items-end">
-                  <span className="text-2xl font-bold">{stats.total} / 25</span>
-                  <span className="text-xs opacity-70 font-semibold">{Math.min(100, (stats.total / 25) * 100).toFixed(0)}%</span>
+                  <span className="text-2xl font-bold">{stats.total} / {applicationGoal}</span>
+                  <span className="text-xs opacity-70 font-semibold">{Math.min(100, (stats.total / applicationGoal) * 100).toFixed(0)}%</span>
                 </div>
                 <div className="w-full bg-white/20 h-2 rounded-full mt-2 overflow-hidden">
-                  <div className="bg-white h-full rounded-full transition-all duration-1000" style={{ width: `${Math.min(100, (stats.total / 25) * 100)}%` }}></div>
+                  <div className="bg-white h-full rounded-full transition-all duration-1000" style={{ width: `${Math.min(100, (stats.total / applicationGoal) * 100)}%` }}></div>
                 </div>
              </div>
           </div>

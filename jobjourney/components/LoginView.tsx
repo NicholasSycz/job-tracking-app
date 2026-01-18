@@ -1,34 +1,75 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Mail, Lock, Loader2, ArrowRight, User } from "lucide-react";
 import { AuthUser } from "../types";
+import { API_BASE_URL } from "../config";
 
 interface Props {
   onLogin: (user: AuthUser) => void;
 }
 
-type AuthMode = "login" | "signup";
+type AuthMode = "login" | "signup" | "forgot-password" | "reset-password";
 
 const LoginView: React.FC<Props> = ({ onLogin }) => {
   const [mode, setMode] = useState<AuthMode>("login");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [resetToken, setResetToken] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
-
-  const API_BASE_URL = "http://localhost:4000";
+  const [googleConfigured, setGoogleConfigured] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const [error, setError] = useState<string | null>(null);
+
+  // Check if Google OAuth is configured
+  useEffect(() => {
+    fetch(`${API_BASE_URL}/auth/google/status`)
+      .then((res) => res.json())
+      .then((data) => setGoogleConfigured(data.configured))
+      .catch(() => setGoogleConfigured(false));
+  }, []);
+
+  // Check for reset token in URL
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get("token");
+    if (token) {
+      setResetToken(token);
+      setMode("reset-password");
+      // Clean up URL
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setError(null);
+    setSuccessMessage(null);
 
     try {
-      const endpoint = mode === "login" ? "/auth/login" : "/auth/signup";
-      const body =
-        mode === "login" ? { email, password } : { name, email, password };
+      let endpoint = "";
+      let body: Record<string, unknown> = {};
+
+      switch (mode) {
+        case "login":
+          endpoint = "/auth/login";
+          body = { email, password };
+          break;
+        case "signup":
+          endpoint = "/auth/signup";
+          body = { name, email, password };
+          break;
+        case "forgot-password":
+          endpoint = "/auth/forgot-password";
+          body = { email };
+          break;
+        case "reset-password":
+          endpoint = "/auth/reset-password";
+          body = { token: resetToken, password };
+          break;
+      }
 
       const res = await fetch(`${API_BASE_URL}${endpoint}`, {
         method: "POST",
@@ -39,12 +80,29 @@ const LoginView: React.FC<Props> = ({ onLogin }) => {
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        setError(data?.error ?? "Authentication failed");
+        setError(data?.error ?? "Operation failed");
         return;
       }
 
-      // Store token for future requests
+      // Handle different response types
+      if (mode === "forgot-password") {
+        setSuccessMessage(data.message || "Check your email for a password reset link.");
+        return;
+      }
+
+      if (mode === "reset-password") {
+        setSuccessMessage(data.message || "Password reset successfully. You can now log in.");
+        setMode("login");
+        setPassword("");
+        setResetToken("");
+        return;
+      }
+
+      // Login or signup success
       localStorage.setItem("auth_token", data.token);
+      if (data.tenantId) {
+        localStorage.setItem("tenant_id", data.tenantId);
+      }
 
       // data.user should match your AuthUser type
       onLogin(data.user as AuthUser);
@@ -57,17 +115,13 @@ const LoginView: React.FC<Props> = ({ onLogin }) => {
   };
 
   const handleGoogleLogin = () => {
+    if (!googleConfigured) {
+      setError("Google OAuth is not configured. Please use email login.");
+      return;
+    }
     setIsGoogleLoading(true);
-    // Simulate Google OAuth Redirect/Callback flow
-    setTimeout(() => {
-      onLogin({
-        id: "google-123",
-        email: "alex.explorer@gmail.com",
-        name: "Alex Explorer",
-        avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=Alex`,
-      });
-      setIsGoogleLoading(false);
-    }, 1000);
+    // Redirect to Google OAuth endpoint
+    window.location.href = `${API_BASE_URL}/auth/google`;
   };
 
   return (
@@ -81,18 +135,25 @@ const LoginView: React.FC<Props> = ({ onLogin }) => {
             JobJourney
           </h1>
           <p className="text-slate-500 dark:text-slate-400">
-            {mode === "login"
-              ? "Your career milestone starts here."
-              : "Start your professional voyage today."}
+            {mode === "login" && "Your career milestone starts here."}
+            {mode === "signup" && "Start your professional voyage today."}
+            {mode === "forgot-password" && "Enter your email to reset your password."}
+            {mode === "reset-password" && "Create a new password for your account."}
           </p>
         </div>
 
         <div className="bg-white dark:bg-slate-900 rounded-3xl p-8 shadow-2xl shadow-slate-200 dark:shadow-none border border-slate-100 dark:border-slate-800 transition-colors">
-          {/* Google Login Button */}
+          {/* Google Login Button - only show for login/signup */}
+          {(mode === "login" || mode === "signup") && (
           <button
             onClick={handleGoogleLogin}
-            disabled={isLoading || isGoogleLoading}
-            className="w-full flex items-center justify-center gap-3 py-3.5 px-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-all mb-6 group disabled:opacity-50"
+            disabled={isLoading || isGoogleLoading || !googleConfigured}
+            className={`w-full flex items-center justify-center gap-3 py-3.5 px-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl font-bold text-slate-700 dark:text-slate-200 transition-all mb-6 group disabled:opacity-50 ${
+              googleConfigured
+                ? "hover:bg-slate-50 dark:hover:bg-slate-700/50 cursor-pointer"
+                : "cursor-not-allowed"
+            }`}
+            title={!googleConfigured ? "Google OAuth not configured" : undefined}
           >
             {isGoogleLoading ? (
               <Loader2 size={20} className="animate-spin text-emerald-500" />
@@ -122,7 +183,9 @@ const LoginView: React.FC<Props> = ({ onLogin }) => {
                 : "Sign up with Google"}
             </span>
           </button>
+          )}
 
+          {(mode === "login" || mode === "signup") && (
           <div className="relative flex items-center mb-6">
             <div className="flex-grow border-t border-slate-100 dark:border-slate-800"></div>
             <span className="flex-shrink mx-4 text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-600">
@@ -130,10 +193,17 @@ const LoginView: React.FC<Props> = ({ onLogin }) => {
             </span>
             <div className="flex-grow border-t border-slate-100 dark:border-slate-800"></div>
           </div>
+          )}
 
           {error && (
             <div className="mb-4 text-xs font-semibold text-red-600 bg-red-50 dark:bg-red-900/30 dark:text-red-300 px-3 py-2 rounded-xl">
               {error}
+            </div>
+          )}
+
+          {successMessage && (
+            <div className="mb-4 text-xs font-semibold text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30 dark:text-emerald-300 px-3 py-2 rounded-xl">
+              {successMessage}
             </div>
           )}
 
@@ -163,45 +233,65 @@ const LoginView: React.FC<Props> = ({ onLogin }) => {
               </div>
             )}
 
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">
-                Work Email
-              </label>
-              <div className="relative">
-                <Mail
-                  className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
-                  size={18}
-                />
-                <input
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="name@company.com"
-                  className="w-full pl-12 pr-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 focus:border-emerald-500 dark:focus:border-emerald-500 rounded-2xl outline-none transition-all dark:text-white text-sm"
-                />
+            {(mode === "login" || mode === "signup" || mode === "forgot-password") && (
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">
+                  Work Email
+                </label>
+                <div className="relative">
+                  <Mail
+                    className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+                    size={18}
+                  />
+                  <input
+                    type="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="name@company.com"
+                    className="w-full pl-12 pr-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 focus:border-emerald-500 dark:focus:border-emerald-500 rounded-2xl outline-none transition-all dark:text-white text-sm"
+                  />
+                </div>
               </div>
-            </div>
+            )}
 
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">
-                Password
-              </label>
-              <div className="relative">
-                <Lock
-                  className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
-                  size={18}
-                />
-                <input
-                  type="password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full pl-12 pr-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 focus:border-emerald-500 dark:focus:border-emerald-500 rounded-2xl outline-none transition-all dark:text-white text-sm"
-                />
+            {(mode === "login" || mode === "signup" || mode === "reset-password") && (
+              <div className="space-y-1.5">
+                <div className="flex justify-between items-center">
+                  <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">
+                    {mode === "reset-password" ? "New Password" : "Password"}
+                  </label>
+                  {mode === "login" && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMode("forgot-password");
+                        setError(null);
+                        setSuccessMessage(null);
+                      }}
+                      className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 hover:underline"
+                    >
+                      Forgot password?
+                    </button>
+                  )}
+                </div>
+                <div className="relative">
+                  <Lock
+                    className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+                    size={18}
+                  />
+                  <input
+                    type="password"
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    minLength={6}
+                    className="w-full pl-12 pr-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 focus:border-emerald-500 dark:focus:border-emerald-500 rounded-2xl outline-none transition-all dark:text-white text-sm"
+                  />
+                </div>
               </div>
-            </div>
+            )}
 
             <button
               type="submit"
@@ -212,7 +302,12 @@ const LoginView: React.FC<Props> = ({ onLogin }) => {
                 <Loader2 size={20} className="animate-spin" />
               ) : (
                 <>
-                  <span>{mode === "login" ? "Sign In" : "Create Account"}</span>
+                  <span>
+                    {mode === "login" && "Sign In"}
+                    {mode === "signup" && "Create Account"}
+                    {mode === "forgot-password" && "Send Reset Link"}
+                    {mode === "reset-password" && "Reset Password"}
+                  </span>
                   <ArrowRight
                     size={18}
                     className="group-hover:translate-x-1 transition-transform"
@@ -223,17 +318,37 @@ const LoginView: React.FC<Props> = ({ onLogin }) => {
           </form>
 
           <div className="mt-8 pt-6 border-t border-slate-50 dark:border-slate-800 text-center">
-            <p className="text-xs text-slate-400 mb-4 font-medium">
-              {mode === "login"
-                ? "New to the journey?"
-                : "Already have an account?"}
-            </p>
-            <button
-              onClick={() => setMode(mode === "login" ? "signup" : "login")}
-              className="text-emerald-600 dark:text-emerald-400 font-bold text-sm hover:underline transition-colors"
-            >
-              {mode === "login" ? "Create an account" : "Sign In instead"}
-            </button>
+            {(mode === "login" || mode === "signup") && (
+              <>
+                <p className="text-xs text-slate-400 mb-4 font-medium">
+                  {mode === "login"
+                    ? "New to the journey?"
+                    : "Already have an account?"}
+                </p>
+                <button
+                  onClick={() => {
+                    setMode(mode === "login" ? "signup" : "login");
+                    setError(null);
+                    setSuccessMessage(null);
+                  }}
+                  className="text-emerald-600 dark:text-emerald-400 font-bold text-sm hover:underline transition-colors"
+                >
+                  {mode === "login" ? "Create an account" : "Sign In instead"}
+                </button>
+              </>
+            )}
+            {(mode === "forgot-password" || mode === "reset-password") && (
+              <button
+                onClick={() => {
+                  setMode("login");
+                  setError(null);
+                  setSuccessMessage(null);
+                }}
+                className="text-emerald-600 dark:text-emerald-400 font-bold text-sm hover:underline transition-colors"
+              >
+                Back to Sign In
+              </button>
+            )}
           </div>
         </div>
       </div>
