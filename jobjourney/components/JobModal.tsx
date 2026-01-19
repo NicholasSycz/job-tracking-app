@@ -76,7 +76,7 @@ const JobModal: React.FC<Props> = ({ isOpen, onClose, onSave, editingJob, isSavi
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-end bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+    <div className="fixed inset-0 z-50 flex items-center justify-end bg-slate-900/60 dark:bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-300">
       <div 
         className="w-full max-w-2xl h-full bg-white dark:bg-slate-950 shadow-2xl flex flex-col animate-in slide-in-from-right duration-500 overflow-y-auto border-l dark:border-slate-800"
       >
@@ -120,12 +120,16 @@ const JobModal: React.FC<Props> = ({ isOpen, onClose, onSave, editingJob, isSavi
           <div className="grid grid-cols-2 gap-6">
              <div className="space-y-2">
                 <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em]">Status</label>
-                <select 
+                <select
                   value={formData.status}
                   onChange={e => setFormData(p => ({ ...p, status: e.target.value as ApplicationStatus }))}
                   className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:border-emerald-500 dark:focus:border-emerald-500 rounded-xl outline-none appearance-none text-slate-800 dark:text-slate-200 text-sm cursor-pointer"
                 >
-                  {Object.values(ApplicationStatus).map(s => <option key={s} value={s}>{s}</option>)}
+                  {Object.values(ApplicationStatus).map(s => (
+                    <option key={s} value={s} className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200">
+                      {s}
+                    </option>
+                  ))}
                 </select>
              </div>
              <div className="space-y-2">

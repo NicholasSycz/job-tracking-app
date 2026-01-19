@@ -22,22 +22,19 @@ import JobModal from "./components/JobModal";
 import ConfirmModal from "./components/ConfirmModal";
 import { apiService } from "./services/apiService";
 import { useToast } from "./contexts/ToastContext";
+import { useTheme } from "./contexts/ThemeContext";
 import { API_BASE_URL } from "./config";
 
 const App: React.FC = () => {
   const { showSuccess, showError } = useToast();
+  const { theme, toggleTheme } = useTheme();
+  const darkMode = theme === 'dark';
+
   const [user, setUser] = useState<AuthUser | null>(null);
   const [applications, setApplications] = useState<JobApplication[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
-  const [darkMode, setDarkMode] = useState<boolean>(() => {
-    return (
-      localStorage.getItem("theme") === "dark" ||
-      (!("theme" in localStorage) &&
-        window.matchMedia("(prefers-color-scheme: dark)").matches)
-    );
-  });
   const [currentView, setCurrentView] = useState<ViewType>("dashboard");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingJob, setEditingJob] = useState<JobApplication | undefined>();
@@ -128,16 +125,6 @@ const App: React.FC = () => {
       showError("Update Failed", "Unable to save your goal.");
     }
   };
-
-  useEffect(() => {
-    if (darkMode) {
-      document.documentElement.classList.add("dark");
-      localStorage.setItem("theme", "dark");
-    } else {
-      document.documentElement.classList.remove("dark");
-      localStorage.setItem("theme", "light");
-    }
-  }, [darkMode]);
 
   useEffect(() => {
     const restoreSession = async () => {
@@ -313,13 +300,8 @@ const App: React.FC = () => {
   }
 
   return (
-    <div
-      className={`flex h-screen overflow-hidden transition-colors duration-300 ${
-        darkMode
-          ? "dark bg-slate-900 text-slate-100"
-          : "bg-slate-50 text-slate-900"
-      }`}
-    >
+    <div className="flex h-screen overflow-hidden transition-colors duration-300 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100">
+
       {/* Sidebar */}
       <aside className="w-64 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 flex flex-col transition-colors duration-300">
         <div className="p-6">
@@ -429,7 +411,7 @@ const App: React.FC = () => {
           </div>
 
           <button
-            onClick={() => setDarkMode(!darkMode)}
+            onClick={toggleTheme}
             className="w-full flex items-center justify-center gap-2 text-slate-500 dark:text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 py-2.5 border border-slate-200 dark:border-slate-800 rounded-xl transition-all hover:bg-slate-50 dark:hover:bg-slate-900"
           >
             {darkMode ? <Sun size={18} /> : <Moon size={18} />}
@@ -459,7 +441,7 @@ const App: React.FC = () => {
         </div>
       </aside>
 
-      <main className="flex-1 overflow-y-auto scroll-smooth">
+      <main className="flex-1 overflow-y-auto scroll-smooth dark:bg-slate-950">
         <header className="sticky top-0 z-10 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-8 py-4 flex justify-between items-center transition-colors">
           <div className="flex items-center gap-3">
             <h1 className="text-xl font-black text-slate-800 dark:text-white capitalize tracking-tight">

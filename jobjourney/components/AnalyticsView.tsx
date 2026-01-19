@@ -1,24 +1,27 @@
-
 import React, { useMemo } from 'react';
-import { 
-  BarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  ResponsiveContainer, 
-  PieChart, 
-  Pie, 
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
   Cell
 } from 'recharts';
 import { JobApplication, ApplicationStatus } from '../types';
+import { useTheme } from '../contexts/ThemeContext';
 
 interface Props {
   applications: JobApplication[];
 }
 
 const AnalyticsView: React.FC<Props> = ({ applications }) => {
+  const { theme } = useTheme();
+  const isDarkMode = theme === 'dark';
+
   const statusData = useMemo(() => {
     const counts: Record<string, number> = {};
     Object.values(ApplicationStatus).forEach(s => counts[s] = 0);
@@ -38,8 +41,6 @@ const AnalyticsView: React.FC<Props> = ({ applications }) => {
 
   const LIGHT_COLORS = ['#64748b', '#3b82f6', '#10b981', '#14b8a6', '#f43f5e', '#94a3b8'];
   const DARK_COLORS = ['#475569', '#2563eb', '#059669', '#0d9488', '#e11d48', '#334155'];
-  
-  const isDarkMode = document.documentElement.classList.contains('dark');
   const COLORS = isDarkMode ? DARK_COLORS : LIGHT_COLORS;
 
   return (
