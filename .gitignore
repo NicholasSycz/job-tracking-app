@@ -69,6 +69,8 @@ pnpm-debug.log*
 # --- Coverage / test artifacts ---
 coverage/
 .nyc_output/
+**/playwright-report/
+**/test-results/
 
 # --- Package manager lockfiles (choose what you use) ---
 # If you want to commit lockfiles, remove these lines.

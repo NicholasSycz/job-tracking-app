@@ -368,6 +368,7 @@ const ApplicationsView: React.FC<Props> = ({ applications, onEdit, onDelete, onB
                   <button
                     onClick={(e) => { e.stopPropagation(); onDelete(job.id); }}
                     disabled={isDeleting}
+                    aria-label="Delete application"
                     className="p-2 text-slate-300 dark:text-slate-700 hover:text-rose-500 dark:hover:text-rose-400 transition-colors opacity-0 group-hover:opacity-100 disabled:opacity-50"
                   >
                     {isDeleting ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}

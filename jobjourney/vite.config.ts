@@ -7,7 +7,7 @@ export default defineConfig(({ mode }) => {
     return {
       server: {
         port: 3000,
-        host: '0.0.0.0',
+        host: process.env.VITE_HOST || '127.0.0.1',
       },
       plugins: [react()],
       define: { },

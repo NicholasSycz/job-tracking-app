@@ -105,6 +105,84 @@ router.post("/tenants/:tenantId/applications", validate(schemas.createApplicatio
   res.status(201).json(toJobResponse(job));
 }));
 
+// BULK ROUTES - Must be defined before /:id routes to avoid matching "bulk" as an id
+
+// DELETE /api/tenants/:tenantId/applications/bulk - Bulk delete applications
+router.delete("/tenants/:tenantId/applications/bulk", asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const tenantId = getParam(req.params.tenantId);
+  const userId = req.userId;
+  const { ids } = req.body as { ids: string[] };
+
+  await verifyTenantAccess(userId, tenantId);
+
+  if (!ids || !Array.isArray(ids) || ids.length === 0) {
+    throw new ValidationError("No application IDs provided");
+  }
+
+  // Verify all jobs belong to tenant
+  const jobs = await prisma.job.findMany({
+    where: { id: { in: ids }, tenantId },
+    select: { id: true },
+  });
+
+  const validIds = jobs.map((j) => j.id);
+
+  // Delete status history first
+  await prisma.jobStatusHistory.deleteMany({
+    where: { jobId: { in: validIds } },
+  });
+
+  // Delete jobs
+  const result = await prisma.job.deleteMany({
+    where: { id: { in: validIds } },
+  });
+
+  res.json({ deleted: result.count });
+}));
+
+// PATCH /api/tenants/:tenantId/applications/bulk - Bulk update application status
+router.patch("/tenants/:tenantId/applications/bulk", asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const tenantId = getParam(req.params.tenantId);
+  const userId = req.userId;
+  const { ids, status } = req.body as { ids: string[]; status: string };
+
+  await verifyTenantAccess(userId, tenantId);
+
+  if (!ids || !Array.isArray(ids) || ids.length === 0) {
+    throw new ValidationError("No application IDs provided");
+  }
+
+  if (!status) {
+    throw new ValidationError("Status is required");
+  }
+
+  // Verify all jobs belong to tenant
+  const jobs = await prisma.job.findMany({
+    where: { id: { in: ids }, tenantId },
+  });
+
+  const validIds = jobs.map((j) => j.id);
+
+  // Update all jobs
+  await prisma.job.updateMany({
+    where: { id: { in: validIds } },
+    data: { status: status as any },
+  });
+
+  // Create status history entries for each
+  await prisma.jobStatusHistory.createMany({
+    data: validIds.map((jobId) => ({
+      jobId,
+      status: status as any,
+      changedAt: new Date(),
+      changedByUserId: userId,
+      notes: `Bulk status change to ${status}`,
+    })),
+  });
+
+  res.json({ updated: validIds.length });
+}));
+
 // PUT /api/tenants/:tenantId/applications/:id - Update application
 router.put("/tenants/:tenantId/applications/:id", validate(schemas.updateApplication), asyncHandler(async (req: AuthenticatedRequest, res) => {
   const tenantId = getParam(req.params.tenantId);
@@ -224,82 +302,6 @@ router.get("/tenants/:tenantId/applications/:id/history", asyncHandler(async (re
   }));
 
   res.json(formattedHistory);
-}));
-
-// DELETE /api/tenants/:tenantId/applications/bulk - Bulk delete applications
-router.delete("/tenants/:tenantId/applications/bulk", asyncHandler(async (req: AuthenticatedRequest, res) => {
-  const tenantId = getParam(req.params.tenantId);
-  const userId = req.userId;
-  const { ids } = req.body as { ids: string[] };
-
-  await verifyTenantAccess(userId, tenantId);
-
-  if (!ids || !Array.isArray(ids) || ids.length === 0) {
-    throw new ValidationError("No application IDs provided");
-  }
-
-  // Verify all jobs belong to tenant
-  const jobs = await prisma.job.findMany({
-    where: { id: { in: ids }, tenantId },
-    select: { id: true },
-  });
-
-  const validIds = jobs.map((j) => j.id);
-
-  // Delete status history first
-  await prisma.jobStatusHistory.deleteMany({
-    where: { jobId: { in: validIds } },
-  });
-
-  // Delete jobs
-  const result = await prisma.job.deleteMany({
-    where: { id: { in: validIds } },
-  });
-
-  res.json({ deleted: result.count });
-}));
-
-// PATCH /api/tenants/:tenantId/applications/bulk - Bulk update application status
-router.patch("/tenants/:tenantId/applications/bulk", asyncHandler(async (req: AuthenticatedRequest, res) => {
-  const tenantId = getParam(req.params.tenantId);
-  const userId = req.userId;
-  const { ids, status } = req.body as { ids: string[]; status: string };
-
-  await verifyTenantAccess(userId, tenantId);
-
-  if (!ids || !Array.isArray(ids) || ids.length === 0) {
-    throw new ValidationError("No application IDs provided");
-  }
-
-  if (!status) {
-    throw new ValidationError("Status is required");
-  }
-
-  // Verify all jobs belong to tenant
-  const jobs = await prisma.job.findMany({
-    where: { id: { in: ids }, tenantId },
-  });
-
-  const validIds = jobs.map((j) => j.id);
-
-  // Update all jobs
-  await prisma.job.updateMany({
-    where: { id: { in: validIds } },
-    data: { status: status as any },
-  });
-
-  // Create status history entries for each
-  await prisma.jobStatusHistory.createMany({
-    data: validIds.map((jobId) => ({
-      jobId,
-      status: status as any,
-      changedAt: new Date(),
-      changedByUserId: userId,
-      notes: `Bulk status change to ${status}`,
-    })),
-  });
-
-  res.json({ updated: validIds.length });
 }));
 
 // Health check
