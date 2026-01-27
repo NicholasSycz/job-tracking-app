@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getSettings, setSettings } from '../../shared/storage';
+import { settingsMessages } from '../../shared/messaging';
 import { REMINDER_PRESETS } from '../../shared/constants';
 import type { ExtensionSettings } from '../../shared/types';
 
@@ -12,8 +12,10 @@ const SettingsView: React.FC = () => {
   }, []);
 
   const loadSettings = async () => {
-    const s = await getSettings();
-    setLocalSettings(s);
+    const response = await settingsMessages.get();
+    if (response.success && response.data) {
+      setLocalSettings(response.data);
+    }
   };
 
   const updateSetting = async <K extends keyof ExtensionSettings>(
@@ -27,7 +29,7 @@ const SettingsView: React.FC = () => {
     setSaving(true);
 
     try {
-      await setSettings({ [key]: value });
+      await settingsMessages.update({ [key]: value });
     } catch (error) {
       console.error('Failed to save setting:', error);
     } finally {

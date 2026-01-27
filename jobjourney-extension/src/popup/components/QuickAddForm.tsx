@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { API_BASE_URL, REMINDER_PRESETS } from '../../shared/constants';
+import { REMINDER_PRESETS } from '../../shared/constants';
+import { jobMessages } from '../../shared/messaging';
 import { ApplicationStatus } from '../../shared/types';
 import type { AuthState, ScrapedJobData, CreateJobRequest } from '../../shared/types';
 
@@ -44,7 +45,7 @@ const QuickAddForm: React.FC<Props> = ({ scrapedJob, authState, onJobSaved }) =>
         externalJobId: scrapedJob.externalJobId,
       }));
 
-      // Check for duplicate
+      // Check for duplicate via background worker
       checkDuplicate(scrapedJob.externalJobId, scrapedJob.link);
     }
   }, [scrapedJob]);
@@ -53,20 +54,9 @@ const QuickAddForm: React.FC<Props> = ({ scrapedJob, authState, onJobSaved }) =>
     if (!externalJobId && !link) return;
 
     try {
-      const params = new URLSearchParams();
-      if (externalJobId) params.append('externalJobId', externalJobId);
-      if (link) params.append('link', link);
-
-      const response = await fetch(
-        `${API_BASE_URL}/api/tenants/${authState.tenantId}/applications/check-duplicate?${params}`,
-        {
-          headers: { Authorization: `Bearer ${authState.token}` },
-        }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        setIsDuplicate(data.isDuplicate);
+      const response = await jobMessages.checkDuplicate(externalJobId, link);
+      if (response.success && response.data) {
+        setIsDuplicate(response.data.isDuplicate);
       }
     } catch (err) {
       console.error('Failed to check duplicate:', err);
@@ -89,25 +79,14 @@ const QuickAddForm: React.FC<Props> = ({ scrapedJob, authState, onJobSaved }) =>
         followUpDate = date.toISOString();
       }
 
-      const response = await fetch(
-        `${API_BASE_URL}/api/tenants/${authState.tenantId}/applications`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${authState.token}`,
-          },
-          body: JSON.stringify({
-            ...formData,
-            followUpDate,
-            reminderEnabled: enableReminder,
-          }),
-        }
-      );
+      const response = await jobMessages.save({
+        ...formData,
+        followUpDate,
+        reminderEnabled: enableReminder,
+      });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || 'Failed to save job');
+      if (!response.success) {
+        throw new Error(response.error || 'Failed to save job');
       }
 
       setSuccess(true);

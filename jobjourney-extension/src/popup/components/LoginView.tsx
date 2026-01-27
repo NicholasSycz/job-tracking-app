@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
-import { setAuthState } from '../../shared/storage';
-import { API_BASE_URL } from '../../shared/constants';
-import type { AuthState, LoginResponse } from '../../shared/types';
+import { authMessages } from '../../shared/messaging';
+import type { AuthState } from '../../shared/types';
 
 interface Props {
   onLoginSuccess: (state: AuthState) => void;
@@ -19,28 +18,13 @@ const LoginView: React.FC<Props> = ({ onLoginSuccess }) => {
     setLoading(true);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
+      const response = await authMessages.login(email, password);
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || 'Login failed');
+      if (!response.success) {
+        throw new Error(response.error || 'Login failed');
       }
 
-      const data: LoginResponse = await response.json();
-
-      // Save auth state to chrome.storage
-      await setAuthState(data.token, data.tenantId, data.user);
-
-      onLoginSuccess({
-        token: data.token,
-        user: data.user,
-        tenantId: data.tenantId,
-        isAuthenticated: true,
-      });
+      onLoginSuccess(response.data!);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
     } finally {
