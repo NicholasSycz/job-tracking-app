@@ -203,6 +203,24 @@ export const schemas = {
       required: false,
       maxLength: 5000,
     },
+    source: {
+      type: 'string' as const,
+      required: false,
+      maxLength: 50,
+    },
+    externalJobId: {
+      type: 'string' as const,
+      required: false,
+      maxLength: 200,
+    },
+    followUpDate: {
+      type: 'date' as const,
+      required: false,
+    },
+    reminderEnabled: {
+      type: 'boolean' as const,
+      required: false,
+    },
   },
 
   updateApplication: {
@@ -251,6 +269,24 @@ export const schemas = {
       type: 'string' as const,
       required: false,
       maxLength: 5000,
+    },
+    source: {
+      type: 'string' as const,
+      required: false,
+      maxLength: 50,
+    },
+    externalJobId: {
+      type: 'string' as const,
+      required: false,
+      maxLength: 200,
+    },
+    followUpDate: {
+      type: 'date' as const,
+      required: false,
+    },
+    reminderEnabled: {
+      type: 'boolean' as const,
+      required: false,
     },
   },
 

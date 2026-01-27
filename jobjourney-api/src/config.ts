@@ -42,9 +42,26 @@ export const JWT_SECRET = isProduction
   : optionalEnv("JWT_SECRET", "dev-secret-change-me");
 
 // CORS
+// Note: Chrome extensions use "chrome-extension://EXTENSION_ID" as origin
+// Add your extension ID to CORS_ORIGINS in production
 export const CORS_ORIGINS = optionalEnv("CORS_ORIGINS", "http://localhost:3000")
   .split(",")
   .map((origin) => origin.trim());
+
+// Helper to check if origin should be allowed (supports chrome-extension:// pattern)
+export function isOriginAllowed(origin: string | undefined): boolean {
+  if (!origin) return false;
+
+  // Allow configured origins
+  if (CORS_ORIGINS.includes(origin)) return true;
+
+  // In development, allow all chrome-extension:// origins
+  if (isDevelopment && origin.startsWith("chrome-extension://")) {
+    return true;
+  }
+
+  return false;
+}
 
 // Frontend URL (for OAuth redirects, etc.)
 export const FRONTEND_URL = optionalEnv("FRONTEND_URL", "http://localhost:3000");

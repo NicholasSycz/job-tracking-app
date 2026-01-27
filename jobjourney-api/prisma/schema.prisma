@@ -86,17 +86,26 @@ model Job {
   link            String?
   notes           String?
 
+  // Extension/reminder fields
+  source          String?            // 'linkedin', 'indeed', 'glassdoor', 'manual', 'extension'
+  externalJobId   String?            // External job ID for deduplication
+  followUpDate    DateTime?          // When to send follow-up reminder
+  reminderEnabled Boolean            @default(false)
+  reminderSentAt  DateTime?          // When reminder was last sent
+
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
 
   tenant          Tenant             @relation(fields: [tenantId], references: [id])
   createdByUser   User               @relation("JobsCreatedBy", fields: [createdByUserId], references: [id])
   statusHistory   JobStatusHistory[]
-  
+
   @@index([tenantId])
   @@index([createdByUserId])
   @@index([status])
   @@index([dateApplied])
+  @@index([followUpDate])
+  @@index([tenantId, externalJobId])
 }
 
 

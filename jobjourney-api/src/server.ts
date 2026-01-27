@@ -6,7 +6,7 @@ import authRoutes from "./routes/auth";
 import applicationRoutes from "./routes/applications";
 import settingsRoutes from "./routes/settings";
 import { errorHandler } from "./middleware/errorHandler";
-import { PORT, CORS_ORIGINS, validateConfig } from "./config";
+import { PORT, isOriginAllowed, validateConfig } from "./config";
 import { authLimiter, apiLimiter } from "./middleware/rateLimit";
 import { requestLogger } from "./middleware/logger";
 
@@ -20,7 +20,16 @@ app.use(requestLogger);
 
 app.use(
   cors({
-    origin: CORS_ORIGINS,
+    origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps or curl)
+      if (!origin) return callback(null, true);
+
+      if (isOriginAllowed(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,

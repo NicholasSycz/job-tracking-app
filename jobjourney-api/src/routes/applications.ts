@@ -35,6 +35,11 @@ function toJobResponse(job: {
   salary: string | null;
   link: string | null;
   notes: string | null;
+  source?: string | null;
+  externalJobId?: string | null;
+  followUpDate?: Date | null;
+  reminderEnabled?: boolean;
+  reminderSentAt?: Date | null;
 }) {
   return {
     id: job.id,
@@ -47,6 +52,11 @@ function toJobResponse(job: {
     salary: job.salary ?? undefined,
     link: job.link ?? undefined,
     notes: job.notes ?? undefined,
+    source: job.source ?? undefined,
+    externalJobId: job.externalJobId ?? undefined,
+    followUpDate: job.followUpDate?.toISOString() ?? undefined,
+    reminderEnabled: job.reminderEnabled ?? false,
+    reminderSentAt: job.reminderSentAt?.toISOString() ?? undefined,
   };
 }
 
@@ -73,7 +83,7 @@ router.post("/tenants/:tenantId/applications", validate(schemas.createApplicatio
 
   await verifyTenantAccess(userId, tenantId);
 
-  const { company, role, status, dateApplied, description, location, salary, link, notes } = req.body;
+  const { company, role, status, dateApplied, description, location, salary, link, notes, source, externalJobId, followUpDate, reminderEnabled } = req.body;
 
   const job = await prisma.job.create({
     data: {
@@ -88,6 +98,10 @@ router.post("/tenants/:tenantId/applications", validate(schemas.createApplicatio
       salary: salary || null,
       link: link || null,
       notes: notes || null,
+      source: source || null,
+      externalJobId: externalJobId || null,
+      followUpDate: followUpDate ? new Date(followUpDate) : null,
+      reminderEnabled: reminderEnabled || false,
     },
   });
 
@@ -200,7 +214,7 @@ router.put("/tenants/:tenantId/applications/:id", validate(schemas.updateApplica
     throw new NotFoundError("Application not found");
   }
 
-  const { company, role, status, dateApplied, description, location, salary, link, notes } = req.body;
+  const { company, role, status, dateApplied, description, location, salary, link, notes, source, externalJobId, followUpDate, reminderEnabled } = req.body;
 
   // Track status change for history
   const statusChanged = status && status !== existingJob.status;
@@ -217,6 +231,10 @@ router.put("/tenants/:tenantId/applications/:id", validate(schemas.updateApplica
       salary: salary !== undefined ? salary || null : existingJob.salary,
       link: link !== undefined ? link || null : existingJob.link,
       notes: notes !== undefined ? notes || null : existingJob.notes,
+      source: source !== undefined ? source || null : existingJob.source,
+      externalJobId: externalJobId !== undefined ? externalJobId || null : existingJob.externalJobId,
+      followUpDate: followUpDate !== undefined ? (followUpDate ? new Date(followUpDate) : null) : existingJob.followUpDate,
+      reminderEnabled: reminderEnabled !== undefined ? reminderEnabled : existingJob.reminderEnabled,
     },
   });
 
@@ -302,6 +320,142 @@ router.get("/tenants/:tenantId/applications/:id/history", asyncHandler(async (re
   }));
 
   res.json(formattedHistory);
+}));
+
+// GET /api/tenants/:tenantId/applications/check-duplicate - Check if job already exists
+router.get("/tenants/:tenantId/applications/check-duplicate", asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const tenantId = getParam(req.params.tenantId);
+  const userId = req.userId;
+
+  await verifyTenantAccess(userId, tenantId);
+
+  const { externalJobId, link } = req.query;
+
+  if (!externalJobId && !link) {
+    res.json({ isDuplicate: false });
+    return;
+  }
+
+  // Check for existing job with same externalJobId or link
+  const existingJob = await prisma.job.findFirst({
+    where: {
+      tenantId,
+      OR: [
+        ...(externalJobId ? [{ externalJobId: externalJobId as string }] : []),
+        ...(link ? [{ link: link as string }] : []),
+      ],
+    },
+    select: { id: true, company: true, role: true },
+  });
+
+  res.json({
+    isDuplicate: !!existingJob,
+    existingJob: existingJob || undefined,
+  });
+}));
+
+// GET /api/tenants/:tenantId/reminders/pending - Get jobs with pending reminders
+router.get("/tenants/:tenantId/reminders/pending", asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const tenantId = getParam(req.params.tenantId);
+  const userId = req.userId;
+
+  await verifyTenantAccess(userId, tenantId);
+
+  const now = new Date();
+
+  // Find jobs where:
+  // - reminderEnabled is true
+  // - followUpDate is in the past or today
+  // - reminderSentAt is null (not sent) or more than 24 hours ago
+  const pendingReminders = await prisma.job.findMany({
+    where: {
+      tenantId,
+      reminderEnabled: true,
+      followUpDate: {
+        lte: now,
+      },
+      OR: [
+        { reminderSentAt: null },
+        {
+          reminderSentAt: {
+            lt: new Date(now.getTime() - 24 * 60 * 60 * 1000), // 24 hours ago
+          },
+        },
+      ],
+    },
+    select: {
+      id: true,
+      company: true,
+      role: true,
+      followUpDate: true,
+      status: true,
+    },
+    orderBy: { followUpDate: "asc" },
+  });
+
+  res.json(pendingReminders.map((job) => ({
+    id: job.id,
+    company: job.company,
+    role: job.role,
+    followUpDate: job.followUpDate?.toISOString(),
+    status: job.status,
+  })));
+}));
+
+// POST /api/tenants/:tenantId/applications/:id/reminder-sent - Mark reminder as sent
+router.post("/tenants/:tenantId/applications/:id/reminder-sent", asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const tenantId = getParam(req.params.tenantId);
+  const id = getParam(req.params.id);
+  const userId = req.userId;
+
+  await verifyTenantAccess(userId, tenantId);
+
+  // Verify job exists and belongs to tenant
+  const existingJob = await prisma.job.findFirst({
+    where: { id, tenantId },
+  });
+
+  if (!existingJob) {
+    throw new NotFoundError("Application not found");
+  }
+
+  await prisma.job.update({
+    where: { id },
+    data: { reminderSentAt: new Date() },
+  });
+
+  res.json({ success: true });
+}));
+
+// PATCH /api/tenants/:tenantId/applications/:id/reminder - Update reminder settings
+router.patch("/tenants/:tenantId/applications/:id/reminder", asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const tenantId = getParam(req.params.tenantId);
+  const id = getParam(req.params.id);
+  const userId = req.userId;
+
+  await verifyTenantAccess(userId, tenantId);
+
+  // Verify job exists and belongs to tenant
+  const existingJob = await prisma.job.findFirst({
+    where: { id, tenantId },
+  });
+
+  if (!existingJob) {
+    throw new NotFoundError("Application not found");
+  }
+
+  const { followUpDate, reminderEnabled, reminderSentAt } = req.body;
+
+  const job = await prisma.job.update({
+    where: { id },
+    data: {
+      followUpDate: followUpDate !== undefined ? (followUpDate ? new Date(followUpDate) : null) : existingJob.followUpDate,
+      reminderEnabled: reminderEnabled !== undefined ? reminderEnabled : existingJob.reminderEnabled,
+      reminderSentAt: reminderSentAt !== undefined ? (reminderSentAt ? new Date(reminderSentAt) : null) : existingJob.reminderSentAt,
+    },
+  });
+
+  res.json(toJobResponse(job));
 }));
 
 // Health check
