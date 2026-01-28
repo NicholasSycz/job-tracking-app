@@ -3,7 +3,7 @@
   position: fixed;
   bottom: 24px;
   right: 24px;
-  z-index: 999999;
+  z-index: 2147483647; /* Maximum z-index */
   display: flex;
   align-items: center;
   gap: 8px;
@@ -19,6 +19,7 @@
   box-shadow: 0 4px 14px rgba(5, 150, 105, 0.4),
               0 2px 6px rgba(0, 0, 0, 0.1);
   transition: all 0.2s ease;
+  outline: none;
 }
 
 #jobjourney-save-btn:hover {
@@ -35,6 +36,8 @@
 
 #jobjourney-save-btn svg {
   flex-shrink: 0;
+  width: 20px;
+  height: 20px;
 }
 
 /* Animation on inject */
@@ -53,13 +56,105 @@
   animation: jobjourney-slide-in 0.3s ease-out;
 }
 
+/* Loading state */
+#jobjourney-save-btn.loading {
+  background: linear-gradient(135deg, #0891b2 0%, #06b6d4 100%);
+  pointer-events: none;
+  box-shadow: 0 4px 14px rgba(8, 145, 178, 0.4),
+              0 2px 6px rgba(0, 0, 0, 0.1);
+}
+
+#jobjourney-save-btn.loading svg {
+  animation: jobjourney-spin 1s linear infinite;
+}
+
+@keyframes jobjourney-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 /* Success state */
 #jobjourney-save-btn.success {
   background: linear-gradient(135deg, #047857 0%, #059669 100%);
   pointer-events: none;
+  box-shadow: 0 4px 14px rgba(4, 120, 87, 0.4),
+              0 2px 6px rgba(0, 0, 0, 0.1);
 }
 
-#jobjourney-save-btn.success::after {
-  content: '✓';
-  margin-left: 4px;
+/* Duplicate state */
+#jobjourney-save-btn.duplicate {
+  background: linear-gradient(135deg, #7c3aed 0%, #8b5cf6 100%);
+  pointer-events: none;
+  box-shadow: 0 4px 14px rgba(124, 58, 237, 0.4),
+              0 2px 6px rgba(0, 0, 0, 0.1);
+}
+
+/* Error state */
+#jobjourney-save-btn.error {
+  background: linear-gradient(135deg, #dc2626 0%, #ef4444 100%);
+  box-shadow: 0 4px 14px rgba(220, 38, 38, 0.4),
+              0 2px 6px rgba(0, 0, 0, 0.1);
+}
+
+#jobjourney-save-btn.error:hover {
+  box-shadow: 0 6px 20px rgba(220, 38, 38, 0.5),
+              0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+/* Pulse animation for success */
+@keyframes jobjourney-pulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+}
+
+#jobjourney-save-btn.success {
+  animation: jobjourney-pulse 0.5s ease-in-out;
+}
+
+/* Dark mode support - detect via media query */
+@media (prefers-color-scheme: dark) {
+  #jobjourney-save-btn {
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4),
+                0 2px 6px rgba(0, 0, 0, 0.2);
+  }
+
+  #jobjourney-save-btn:hover {
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5),
+                0 4px 8px rgba(0, 0, 0, 0.25);
+  }
+}
+
+/* Responsive - smaller on mobile */
+@media (max-width: 768px) {
+  #jobjourney-save-btn {
+    bottom: 16px;
+    right: 16px;
+    padding: 10px 16px;
+    font-size: 13px;
+  }
+
+  #jobjourney-save-btn svg {
+    width: 18px;
+    height: 18px;
+  }
+}
+
+/* Hide text on very small screens, show icon only */
+@media (max-width: 400px) {
+  #jobjourney-save-btn span {
+    display: none;
+  }
+
+  #jobjourney-save-btn {
+    padding: 12px;
+    border-radius: 50%;
+  }
 }
