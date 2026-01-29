@@ -229,6 +229,39 @@ async function handleMessage(
       }
     }
 
+    case 'GET_RECENT_JOBS': {
+      const { limit } = (message.payload as { limit?: number }) || {};
+      try {
+        const jobs = await applicationsApi.list();
+        // Sort by dateApplied descending and limit
+        const sortedJobs = jobs
+          .sort((a, b) => new Date(b.dateApplied).getTime() - new Date(a.dateApplied).getTime())
+          .slice(0, limit || 10);
+        return { success: true, data: sortedJobs };
+      } catch (error) {
+        if (error instanceof ApiError) {
+          return { success: false, error: error.message };
+        }
+        throw error;
+      }
+    }
+
+    case 'UPDATE_JOB_STATUS': {
+      const { applicationId, status } = message.payload as {
+        applicationId: string;
+        status: string;
+      };
+      try {
+        const job = await applicationsApi.update(applicationId, { status: status as any });
+        return { success: true, data: job };
+      } catch (error) {
+        if (error instanceof ApiError) {
+          return { success: false, error: error.message };
+        }
+        throw error;
+      }
+    }
+
     default:
       return { success: false, error: `Unknown message type: ${message.type}` };
   }

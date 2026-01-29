@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { JobApplication, ApplicationStatus } from '../types';
-import { Filter, Trash2, ExternalLink, MapPin, DollarSign, Calendar, Briefcase, Loader2, ArrowUpDown, ChevronDown, Download, CheckSquare, Square, X } from 'lucide-react';
+import { Filter, Trash2, ExternalLink, MapPin, DollarSign, Calendar, Briefcase, Loader2, ArrowUpDown, ChevronDown, Download, CheckSquare, Square, X, Bell } from 'lucide-react';
 import { StatusBadge } from './DashboardView';
 import { exportToCSV, exportToJSON } from '../utils/export';
 
@@ -401,6 +401,17 @@ const ApplicationsView: React.FC<Props> = ({ applications, onEdit, onDelete, onB
                     <Calendar size={14} className="text-slate-400" />
                     <span>Applied {new Date(job.dateApplied).toLocaleDateString()}</span>
                   </div>
+                  {job.reminderEnabled && job.followUpDate && (
+                    <div className="flex items-center gap-2 text-amber-600 dark:text-amber-500 text-xs">
+                      <Bell size={14} />
+                      <span>
+                        Follow-up {new Date(job.followUpDate) <= new Date()
+                          ? 'due'
+                          : new Date(job.followUpDate).toLocaleDateString()
+                        }
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="h-20 overflow-hidden relative">

@@ -101,7 +101,9 @@ export type MessageType =
   | 'GET_SETTINGS'
   | 'UPDATE_SETTINGS'
   | 'SET_REMINDER'
-  | 'SNOOZE_REMINDER';
+  | 'SNOOZE_REMINDER'
+  | 'GET_RECENT_JOBS'
+  | 'UPDATE_JOB_STATUS';
 
 export interface Message<T = unknown> {
   type: MessageType;

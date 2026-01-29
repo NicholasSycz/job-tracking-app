@@ -62,6 +62,14 @@ export const jobMessages = {
   ): Promise<MessageResponse<{ isDuplicate: boolean; existingJob?: { id: string; company: string; role: string } }>> {
     return sendMessage('CHECK_DUPLICATE', { externalJobId, link });
   },
+
+  getRecent(limit?: number): Promise<MessageResponse<JobApplication[]>> {
+    return sendMessage('GET_RECENT_JOBS', { limit });
+  },
+
+  updateStatus(applicationId: string, status: string): Promise<MessageResponse<JobApplication>> {
+    return sendMessage('UPDATE_JOB_STATUS', { applicationId, status });
+  },
 };
 
 // Reminder messaging

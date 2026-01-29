@@ -8,6 +8,8 @@ export enum ApplicationStatus {
 }
 
 
+export type JobSource = 'linkedin' | 'indeed' | 'glassdoor' | 'manual' | 'extension';
+
 export interface JobApplication {
   id: string;
   company: string;
@@ -19,6 +21,11 @@ export interface JobApplication {
   salary?: string;
   link?: string;
   notes?: string;
+  source?: JobSource;
+  externalJobId?: string;
+  followUpDate?: string;
+  reminderEnabled?: boolean;
+  reminderSentAt?: string;
 }
 
 export interface AuthUser {

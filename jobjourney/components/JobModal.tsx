@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, Link2, MapPin, DollarSign, Calendar, Briefcase, Loader2 } from 'lucide-react';
+import { X, Save, Link2, MapPin, DollarSign, Calendar, Briefcase, Loader2, Bell, Clock } from 'lucide-react';
 import { JobApplication, ApplicationStatus } from '../types';
 import StatusHistory from './StatusHistory';
 
@@ -21,7 +21,9 @@ const JobModal: React.FC<Props> = ({ isOpen, onClose, onSave, editingJob, isSavi
     location: '',
     salary: '',
     link: '',
-    notes: ''
+    notes: '',
+    followUpDate: '',
+    reminderEnabled: false,
   });
 
   useEffect(() => {
@@ -37,7 +39,9 @@ const JobModal: React.FC<Props> = ({ isOpen, onClose, onSave, editingJob, isSavi
         location: '',
         salary: '',
         link: '',
-        notes: ''
+        notes: '',
+        followUpDate: '',
+        reminderEnabled: false,
       });
     }
   }, [editingJob, isOpen]);
@@ -66,6 +70,8 @@ const JobModal: React.FC<Props> = ({ isOpen, onClose, onSave, editingJob, isSavi
           salary: formData.salary,
           link: formData.link,
           notes: formData.notes,
+          followUpDate: formData.followUpDate || undefined,
+          reminderEnabled: formData.reminderEnabled,
         });
       }
       // Only close if save was successful
@@ -209,6 +215,81 @@ const JobModal: React.FC<Props> = ({ isOpen, onClose, onSave, editingJob, isSavi
               placeholder="Contacts, referral info, timeline details..."
               className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:border-emerald-500 dark:focus:border-emerald-500 rounded-2xl outline-none transition-all resize-none text-slate-800 dark:text-slate-200 text-sm leading-relaxed"
             />
+          </div>
+
+          {/* Follow-up Reminder */}
+          <div className="space-y-4 p-4 bg-amber-50/50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800/50 rounded-2xl">
+            <div className="flex items-center gap-3">
+              <Bell className="text-amber-600 dark:text-amber-500" size={18} />
+              <span className="text-[10px] font-bold text-amber-700 dark:text-amber-500 uppercase tracking-[0.2em]">Follow-up Reminder</span>
+            </div>
+
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={formData.reminderEnabled || false}
+                onChange={e => setFormData(p => ({ ...p, reminderEnabled: e.target.checked }))}
+                className="w-5 h-5 rounded border-amber-300 dark:border-amber-700 text-amber-600 focus:ring-amber-500"
+              />
+              <span className="text-sm text-slate-700 dark:text-slate-300">Enable follow-up reminder</span>
+            </label>
+
+            {formData.reminderEnabled && (
+              <div className="space-y-3">
+                <div className="flex gap-2 flex-wrap">
+                  {[
+                    { label: '3 days', days: 3 },
+                    { label: '1 week', days: 7 },
+                    { label: '2 weeks', days: 14 },
+                  ].map(preset => {
+                    const presetDate = new Date();
+                    presetDate.setDate(presetDate.getDate() + preset.days);
+                    const presetDateStr = presetDate.toISOString().split('T')[0];
+                    const isSelected = formData.followUpDate?.split('T')[0] === presetDateStr;
+
+                    return (
+                      <button
+                        key={preset.days}
+                        type="button"
+                        onClick={() => setFormData(p => ({ ...p, followUpDate: presetDate.toISOString() }))}
+                        className={`px-4 py-2 text-sm font-medium rounded-xl transition-colors ${
+                          isSelected
+                            ? 'bg-amber-600 text-white'
+                            : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-amber-100 dark:hover:bg-amber-900/30 border border-amber-200 dark:border-amber-800'
+                        }`}
+                      >
+                        {preset.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Clock className="text-slate-400" size={16} />
+                  <span className="text-xs text-slate-500 dark:text-slate-400">Or pick a date:</span>
+                  <input
+                    type="date"
+                    value={formData.followUpDate?.split('T')[0] || ''}
+                    onChange={e => setFormData(p => ({ ...p, followUpDate: e.target.value ? new Date(e.target.value).toISOString() : '' }))}
+                    min={new Date().toISOString().split('T')[0]}
+                    className="px-3 py-1.5 text-sm bg-white dark:bg-slate-800 border border-amber-200 dark:border-amber-800 rounded-lg focus:border-amber-500 outline-none text-slate-700 dark:text-slate-300"
+                  />
+                </div>
+
+                {formData.followUpDate && (
+                  <p className="text-xs text-amber-600 dark:text-amber-500 flex items-center gap-1.5">
+                    <Bell size={12} />
+                    Reminder set for {new Date(formData.followUpDate).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {editingJob?.reminderSentAt && (
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Last reminder sent: {new Date(editingJob.reminderSentAt).toLocaleDateString()}
+              </p>
+            )}
           </div>
 
           {/* Status History - only show when editing */}

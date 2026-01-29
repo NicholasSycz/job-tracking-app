@@ -8,8 +8,14 @@ export class LinkedInScraper extends BaseScraper {
     const company = this.getCompany();
     const role = this.getRole();
 
+    console.log('JobJourney LinkedIn Scraper - Company:', company, 'Role:', role);
+
     if (!company || !role) {
       console.log('JobJourney: Could not find company or role on LinkedIn page');
+      console.log('JobJourney: Available elements for debugging:');
+      console.log('  - h1 elements:', document.querySelectorAll('h1').length);
+      console.log('  - job-title elements:', document.querySelectorAll('[class*="job-title"]').length);
+      console.log('  - company elements:', document.querySelectorAll('[class*="company"]').length);
       return null;
     }
 
@@ -26,39 +32,44 @@ export class LinkedInScraper extends BaseScraper {
   }
 
   private getCompany(): string {
-    // Job detail page selectors - try multiple patterns
+    // Job detail page selectors - try multiple patterns based on HAR analysis
     const selectors = [
-      // New LinkedIn UI (2024+)
+      // Primary selector from HAR (2024+ UI)
       '.job-details-jobs-unified-top-card__company-name a',
       '.job-details-jobs-unified-top-card__company-name',
+      // Subtitle grouping often contains company link
+      '.job-details-jobs-unified-top-card__subtitle-primary-grouping a[href*="/company/"]',
+      '.job-details-jobs-unified-top-card__primary-description-container a[href*="/company/"]',
+      // Older UI patterns
       '.jobs-unified-top-card__company-name a',
       '.jobs-unified-top-card__company-name',
-      // Job search results page
-      '.job-details-jobs-unified-top-card__primary-description-container a',
-      // Older selectors
-      '[data-tracking-control-name="public_jobs_topcard-org-name"]',
+      // Public/guest job pages
       '.topcard__org-name-link',
-      '.company-name',
-      // Generic fallbacks
-      'a[href*="/company/"]',
+      '[data-tracking-control-name="public_jobs_topcard-org-name"]',
+      // Generic company link fallback
+      '.artdeco-entity-lockup__subtitle a',
     ];
 
     for (const selector of selectors) {
-      const text = this.getText(selector);
-      if (text && text.length > 1 && text.length < 200) {
-        return text;
+      const element = document.querySelector(selector);
+      if (element) {
+        const text = element.textContent?.trim();
+        if (text && text.length > 1 && text.length < 200) {
+          console.log('JobJourney: Found company via selector:', selector);
+          return text;
+        }
       }
     }
 
-    // Try to find company from the primary description container
-    const container = document.querySelector('.job-details-jobs-unified-top-card__primary-description-container');
-    if (container) {
-      const links = container.querySelectorAll('a');
-      for (const link of links) {
-        const href = link.getAttribute('href') || '';
-        if (href.includes('/company/')) {
-          const text = link.textContent?.trim();
-          if (text && text.length > 1) return text;
+    // Fallback: Find any company link in the top card area
+    const topCard = document.querySelector('[class*="top-card"], [class*="topcard"]');
+    if (topCard) {
+      const companyLinks = topCard.querySelectorAll('a[href*="/company/"]');
+      for (const link of companyLinks) {
+        const text = link.textContent?.trim();
+        if (text && text.length > 1 && text.length < 100) {
+          console.log('JobJourney: Found company via fallback company link');
+          return text;
         }
       }
     }
@@ -68,21 +79,52 @@ export class LinkedInScraper extends BaseScraper {
 
   private getRole(): string {
     const selectors = [
-      // New LinkedIn UI
+      // Primary selector with typography class from HAR
+      'h1.job-details-jobs-unified-top-card__job-title',
       '.job-details-jobs-unified-top-card__job-title h1',
+      '.job-details-jobs-unified-top-card__job-title a',
       '.job-details-jobs-unified-top-card__job-title',
+      // Older UI
+      '.jobs-unified-top-card__job-title h1',
       '.jobs-unified-top-card__job-title',
-      // Older selectors
+      // Public/guest pages
       '.topcard__title',
-      'h1.jobs-unified-top-card__job-title',
-      // Generic h1
-      'h1',
+      // Typography-based selector (LinkedIn uses t-24 for large headings)
+      '.t-24.job-details-jobs-unified-top-card__job-title',
+      'h1.t-24',
+      // Generic fallback - find h1 within job details
+      '.jobs-search__job-details h1',
+      '.job-view-layout h1',
     ];
 
     for (const selector of selectors) {
-      const text = this.getText(selector);
-      // Filter out generic LinkedIn headers
-      if (text && !text.includes('LinkedIn') && !text.includes('Sign in') && text.length > 2) {
+      const element = document.querySelector(selector);
+      if (element) {
+        const text = element.textContent?.trim();
+        // Filter out generic LinkedIn headers and navigation
+        if (text &&
+            text.length > 2 &&
+            text.length < 200 &&
+            !text.includes('LinkedIn') &&
+            !text.includes('Sign in') &&
+            !text.includes('Join now')) {
+          console.log('JobJourney: Found role via selector:', selector);
+          return text;
+        }
+      }
+    }
+
+    // Ultimate fallback: first h1 that looks like a job title
+    const h1Elements = document.querySelectorAll('h1');
+    for (const h1 of h1Elements) {
+      const text = h1.textContent?.trim();
+      if (text &&
+          text.length > 5 &&
+          text.length < 150 &&
+          !text.includes('LinkedIn') &&
+          !text.includes('Sign') &&
+          !text.includes('Join')) {
+        console.log('JobJourney: Found role via h1 fallback');
         return text;
       }
     }

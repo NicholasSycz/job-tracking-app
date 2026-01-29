@@ -172,13 +172,18 @@ async function handleSaveClick(button: HTMLElement) {
     }
   }
 
-  // Scrape job data
+  // Scrape job data - try multiple times if needed
   currentJobData = scrapeJob();
+  if (!currentJobData) {
+    // Wait and retry once more
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    currentJobData = scrapeJob();
+  }
   if (!currentJobData) {
     buttonState = 'error';
     updateButtonState(button);
     const textSpan = button.querySelector('span');
-    if (textSpan) textSpan.textContent = 'Could not read job';
+    if (textSpan) textSpan.textContent = 'Could not read job - try refreshing';
     setTimeout(() => {
       buttonState = 'idle';
       updateButtonState(button);
@@ -255,13 +260,21 @@ function injectSaveButton() {
   // Check auth status in background
   checkAuth();
 
-  // Pre-scrape job data
-  setTimeout(() => {
+  // Pre-scrape job data with retry logic
+  const attemptScrape = (retries: number) => {
     currentJobData = scrapeJob();
     if (currentJobData) {
       console.log('JobJourney: Scraped job data:', currentJobData.company, '-', currentJobData.role);
+    } else if (retries > 0) {
+      console.log(`JobJourney: Scrape failed, retrying in 1s (${retries} retries left)`);
+      setTimeout(() => attemptScrape(retries - 1), 1000);
+    } else {
+      console.log('JobJourney: Could not scrape job data after retries');
     }
-  }, 1000);
+  };
+
+  // Start scraping with 5 retry attempts (waits up to 6 seconds total)
+  setTimeout(() => attemptScrape(5), 1000);
 }
 
 // Handle messages from popup
