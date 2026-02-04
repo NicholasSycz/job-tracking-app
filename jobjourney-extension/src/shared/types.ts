@@ -40,6 +40,9 @@ export interface JobApplication {
   followUpDate?: string;
   reminderEnabled?: boolean;
   reminderSentAt?: string;
+  interviewDate?: string;
+  interviewReminderEnabled?: boolean;
+  interviewReminderSentAt?: string;
 }
 
 // Create job request (for API)
@@ -57,6 +60,8 @@ export interface CreateJobRequest {
   externalJobId?: string;
   followUpDate?: string;
   reminderEnabled?: boolean;
+  interviewDate?: string;
+  interviewReminderEnabled?: boolean;
 }
 
 // Auth user

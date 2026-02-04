@@ -86,6 +86,11 @@ model Job {
   link            String?
   notes           String?
 
+  // Interview scheduling
+  interviewDate            DateTime?          // Date and time of scheduled interview
+  interviewReminderEnabled Boolean            @default(false)
+  interviewReminderSentAt  DateTime?          // When interview reminder was sent
+
   // Extension/reminder fields
   source          String?            // 'linkedin', 'indeed', 'glassdoor', 'manual', 'extension'
   externalJobId   String?            // External job ID for deduplication
@@ -105,6 +110,7 @@ model Job {
   @@index([status])
   @@index([dateApplied])
   @@index([followUpDate])
+  @@index([interviewDate])
   @@index([tenantId, externalJobId])
 }
 

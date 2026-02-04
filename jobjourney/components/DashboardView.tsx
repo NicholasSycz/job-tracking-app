@@ -65,7 +65,7 @@ const DashboardView: React.FC<Props> = ({ applications, onEdit, applicationGoal 
         </div>
 
         {/* Motivational Card */}
-        <div className="bg-gradient-to-br from-emerald-600 to-teal-700 rounded-2xl p-8 text-white flex flex-col justify-between shadow-lg shadow-emerald-200 dark:shadow-none">
+        <div className="max-h-max bg-gradient-to-br from-emerald-600 to-teal-700 rounded-2xl p-8 text-white flex flex-col justify-between shadow-lg shadow-emerald-200 dark:shadow-none">
           <div>
             <h3 className="text-2xl font-bold mb-2">Your Journey!</h3>
             <p className="text-emerald-100 mb-6 opacity-90">Every application is a step toward your next chapter. JobJourney helps you stay on course.</p>

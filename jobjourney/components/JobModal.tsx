@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, Link2, MapPin, DollarSign, Calendar, Briefcase, Loader2, Bell, Clock } from 'lucide-react';
+import { X, Save, Link2, MapPin, DollarSign, Calendar, Briefcase, Loader2, Bell, Clock, Video } from 'lucide-react';
 import { JobApplication, ApplicationStatus } from '../types';
 import StatusHistory from './StatusHistory';
 
@@ -10,6 +10,19 @@ interface Props {
   editingJob?: JobApplication;
   isSaving?: boolean;
 }
+
+// Helper to convert ISO string to datetime-local input format (YYYY-MM-DDTHH:mm)
+const toDatetimeLocalValue = (isoString: string | undefined): string => {
+  if (!isoString) return '';
+  const date = new Date(isoString);
+  // Format as local datetime for the input
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+};
 
 const JobModal: React.FC<Props> = ({ isOpen, onClose, onSave, editingJob, isSaving = false }) => {
   const [formData, setFormData] = useState<Partial<JobApplication>>({
@@ -24,6 +37,8 @@ const JobModal: React.FC<Props> = ({ isOpen, onClose, onSave, editingJob, isSavi
     notes: '',
     followUpDate: '',
     reminderEnabled: false,
+    interviewDate: '',
+    interviewReminderEnabled: false,
   });
 
   useEffect(() => {
@@ -42,6 +57,8 @@ const JobModal: React.FC<Props> = ({ isOpen, onClose, onSave, editingJob, isSavi
         notes: '',
         followUpDate: '',
         reminderEnabled: false,
+        interviewDate: '',
+        interviewReminderEnabled: false,
       });
     }
   }, [editingJob, isOpen]);
@@ -51,12 +68,18 @@ const JobModal: React.FC<Props> = ({ isOpen, onClose, onSave, editingJob, isSavi
   const handleSave = async () => {
     if (!formData.company || !formData.role) return;
 
+    // Convert interviewDate to ISO if it's a local datetime string
+    const interviewDateISO = formData.interviewDate
+      ? new Date(formData.interviewDate).toISOString()
+      : undefined;
+
     try {
       if (editingJob) {
         // Editing existing job - include the id
         await onSave({
           ...formData,
           id: editingJob.id,
+          interviewDate: interviewDateISO,
         } as JobApplication);
       } else {
         // Creating new job - let server generate id
@@ -72,6 +95,8 @@ const JobModal: React.FC<Props> = ({ isOpen, onClose, onSave, editingJob, isSavi
           notes: formData.notes,
           followUpDate: formData.followUpDate || undefined,
           reminderEnabled: formData.reminderEnabled,
+          interviewDate: interviewDateISO,
+          interviewReminderEnabled: formData.interviewReminderEnabled,
         });
       }
       // Only close if save was successful
@@ -290,6 +315,64 @@ const JobModal: React.FC<Props> = ({ isOpen, onClose, onSave, editingJob, isSavi
                 Last reminder sent: {new Date(editingJob.reminderSentAt).toLocaleDateString()}
               </p>
             )}
+          </div>
+
+          {/* Interview Scheduling */}
+          <div className="space-y-4 p-4 bg-blue-50/50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800/50 rounded-2xl">
+            <div className="flex items-center gap-3">
+              <Video className="text-blue-600 dark:text-blue-500" size={18} />
+              <span className="text-[10px] font-bold text-blue-700 dark:text-blue-500 uppercase tracking-[0.2em]">Interview Scheduled</span>
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center gap-3">
+                <Calendar className="text-slate-400" size={16} />
+                <span className="text-xs text-slate-500 dark:text-slate-400">Date & Time:</span>
+                <input
+                  type="datetime-local"
+                  value={toDatetimeLocalValue(formData.interviewDate)}
+                  onChange={e => setFormData(p => ({ ...p, interviewDate: e.target.value || '' }))}
+                  className="px-3 py-1.5 text-sm bg-white dark:bg-slate-800 border border-blue-200 dark:border-blue-800 rounded-lg focus:border-blue-500 outline-none text-slate-700 dark:text-slate-300"
+                />
+                {formData.interviewDate && (
+                  <button
+                    type="button"
+                    onClick={() => setFormData(p => ({ ...p, interviewDate: '', interviewReminderEnabled: false }))}
+                    className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+
+              {formData.interviewDate && (
+                <>
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.interviewReminderEnabled || false}
+                      onChange={e => setFormData(p => ({ ...p, interviewReminderEnabled: e.target.checked }))}
+                      className="w-5 h-5 rounded border-blue-300 dark:border-blue-700 text-blue-600 focus:ring-blue-500"
+                    />
+                    <span className="text-sm text-slate-700 dark:text-slate-300">Remind me before the interview</span>
+                  </label>
+
+                  <p className="text-xs text-blue-600 dark:text-blue-500 flex items-center gap-1.5">
+                    <Video size={12} />
+                    Interview scheduled for {(() => {
+                      const date = new Date(formData.interviewDate!);
+                      return `${date.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })} at ${date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
+                    })()}
+                  </p>
+                </>
+              )}
+
+              {editingJob?.interviewReminderSentAt && (
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Reminder sent: {new Date(editingJob.interviewReminderSentAt).toLocaleDateString()}
+                </p>
+              )}
+            </div>
           </div>
 
           {/* Status History - only show when editing */}

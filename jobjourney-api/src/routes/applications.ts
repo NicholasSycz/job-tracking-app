@@ -40,6 +40,9 @@ function toJobResponse(job: {
   followUpDate?: Date | null;
   reminderEnabled?: boolean;
   reminderSentAt?: Date | null;
+  interviewDate?: Date | null;
+  interviewReminderEnabled?: boolean;
+  interviewReminderSentAt?: Date | null;
 }) {
   return {
     id: job.id,
@@ -57,6 +60,9 @@ function toJobResponse(job: {
     followUpDate: job.followUpDate?.toISOString() ?? undefined,
     reminderEnabled: job.reminderEnabled ?? false,
     reminderSentAt: job.reminderSentAt?.toISOString() ?? undefined,
+    interviewDate: job.interviewDate?.toISOString() ?? undefined,
+    interviewReminderEnabled: job.interviewReminderEnabled ?? false,
+    interviewReminderSentAt: job.interviewReminderSentAt?.toISOString() ?? undefined,
   };
 }
 
@@ -83,7 +89,7 @@ router.post("/tenants/:tenantId/applications", validate(schemas.createApplicatio
 
   await verifyTenantAccess(userId, tenantId);
 
-  const { company, role, status, dateApplied, description, location, salary, link, notes, source, externalJobId, followUpDate, reminderEnabled } = req.body;
+  const { company, role, status, dateApplied, description, location, salary, link, notes, source, externalJobId, followUpDate, reminderEnabled, interviewDate, interviewReminderEnabled } = req.body;
 
   const job = await prisma.job.create({
     data: {
@@ -102,6 +108,8 @@ router.post("/tenants/:tenantId/applications", validate(schemas.createApplicatio
       externalJobId: externalJobId || null,
       followUpDate: followUpDate ? new Date(followUpDate) : null,
       reminderEnabled: reminderEnabled || false,
+      interviewDate: interviewDate ? new Date(interviewDate) : null,
+      interviewReminderEnabled: interviewReminderEnabled || false,
     },
   });
 
@@ -120,6 +128,105 @@ router.post("/tenants/:tenantId/applications", validate(schemas.createApplicatio
 }));
 
 // BULK ROUTES - Must be defined before /:id routes to avoid matching "bulk" as an id
+
+// POST /api/tenants/:tenantId/applications/bulk - Bulk import applications
+router.post("/tenants/:tenantId/applications/bulk", asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const tenantId = getParam(req.params.tenantId);
+  const userId = req.userId;
+  const { applications } = req.body as { applications: Array<{
+    company: string;
+    role: string;
+    status?: string;
+    dateApplied?: string;
+    description?: string;
+    location?: string;
+    salary?: string;
+    link?: string;
+    notes?: string;
+    source?: string;
+    externalJobId?: string;
+    followUpDate?: string;
+    reminderEnabled?: boolean;
+    interviewDate?: string;
+    interviewReminderEnabled?: boolean;
+  }> };
+
+  await verifyTenantAccess(userId, tenantId);
+
+  if (!applications || !Array.isArray(applications) || applications.length === 0) {
+    throw new ValidationError("No applications provided");
+  }
+
+  // Limit bulk import to 100 at a time
+  if (applications.length > 100) {
+    throw new ValidationError("Maximum 100 applications per import");
+  }
+
+  // Validate required fields
+  const errors: string[] = [];
+  applications.forEach((app, index) => {
+    if (!app.company || typeof app.company !== 'string' || app.company.trim() === '') {
+      errors.push(`Application ${index + 1}: company is required`);
+    }
+    if (!app.role || typeof app.role !== 'string' || app.role.trim() === '') {
+      errors.push(`Application ${index + 1}: role is required`);
+    }
+    if (app.status && !['INTERESTED', 'APPLIED', 'INTERVIEWING', 'OFFER', 'REJECTED', 'GHOSTED'].includes(app.status)) {
+      errors.push(`Application ${index + 1}: invalid status "${app.status}"`);
+    }
+  });
+
+  if (errors.length > 0) {
+    throw new ValidationError(errors.join('; '));
+  }
+
+  // Create all applications
+  const createdJobs = await prisma.$transaction(async (tx) => {
+    const jobs = [];
+    for (const app of applications) {
+      const job = await tx.job.create({
+        data: {
+          tenantId,
+          createdByUserId: userId,
+          company: app.company.trim(),
+          role: app.role.trim(),
+          status: (app.status as "INTERESTED" | "APPLIED" | "INTERVIEWING" | "OFFER" | "REJECTED" | "GHOSTED") || "INTERESTED",
+          dateApplied: app.dateApplied ? new Date(app.dateApplied) : new Date(),
+          description: app.description || null,
+          location: app.location || null,
+          salary: app.salary || null,
+          link: app.link || null,
+          notes: app.notes || null,
+          source: app.source || 'manual',
+          externalJobId: app.externalJobId || null,
+          followUpDate: app.followUpDate ? new Date(app.followUpDate) : null,
+          reminderEnabled: app.reminderEnabled || false,
+          interviewDate: app.interviewDate ? new Date(app.interviewDate) : null,
+          interviewReminderEnabled: app.interviewReminderEnabled || false,
+        },
+      });
+
+      // Create initial status history entry
+      await tx.jobStatusHistory.create({
+        data: {
+          jobId: job.id,
+          status: job.status,
+          changedAt: new Date(),
+          changedByUserId: userId,
+          notes: "Application imported",
+        },
+      });
+
+      jobs.push(job);
+    }
+    return jobs;
+  });
+
+  res.status(201).json({
+    imported: createdJobs.length,
+    applications: createdJobs.map(toJobResponse),
+  });
+}));
 
 // DELETE /api/tenants/:tenantId/applications/bulk - Bulk delete applications
 router.delete("/tenants/:tenantId/applications/bulk", asyncHandler(async (req: AuthenticatedRequest, res) => {
@@ -214,7 +321,7 @@ router.put("/tenants/:tenantId/applications/:id", validate(schemas.updateApplica
     throw new NotFoundError("Application not found");
   }
 
-  const { company, role, status, dateApplied, description, location, salary, link, notes, source, externalJobId, followUpDate, reminderEnabled } = req.body;
+  const { company, role, status, dateApplied, description, location, salary, link, notes, source, externalJobId, followUpDate, reminderEnabled, interviewDate, interviewReminderEnabled } = req.body;
 
   // Track status change for history
   const statusChanged = status && status !== existingJob.status;
@@ -235,6 +342,8 @@ router.put("/tenants/:tenantId/applications/:id", validate(schemas.updateApplica
       externalJobId: externalJobId !== undefined ? externalJobId || null : existingJob.externalJobId,
       followUpDate: followUpDate !== undefined ? (followUpDate ? new Date(followUpDate) : null) : existingJob.followUpDate,
       reminderEnabled: reminderEnabled !== undefined ? reminderEnabled : existingJob.reminderEnabled,
+      interviewDate: interviewDate !== undefined ? (interviewDate ? new Date(interviewDate) : null) : existingJob.interviewDate,
+      interviewReminderEnabled: interviewReminderEnabled !== undefined ? interviewReminderEnabled : existingJob.interviewReminderEnabled,
     },
   });
 

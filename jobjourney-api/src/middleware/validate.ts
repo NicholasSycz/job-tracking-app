@@ -221,6 +221,14 @@ export const schemas = {
       type: 'boolean' as const,
       required: false,
     },
+    interviewDate: {
+      type: 'date' as const,
+      required: false,
+    },
+    interviewReminderEnabled: {
+      type: 'boolean' as const,
+      required: false,
+    },
   },
 
   updateApplication: {
@@ -285,6 +293,14 @@ export const schemas = {
       required: false,
     },
     reminderEnabled: {
+      type: 'boolean' as const,
+      required: false,
+    },
+    interviewDate: {
+      type: 'date' as const,
+      required: false,
+    },
+    interviewReminderEnabled: {
       type: 'boolean' as const,
       required: false,
     },

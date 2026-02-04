@@ -26,6 +26,9 @@ export interface JobApplication {
   followUpDate?: string;
   reminderEnabled?: boolean;
   reminderSentAt?: string;
+  interviewDate?: string;
+  interviewReminderEnabled?: boolean;
+  interviewReminderSentAt?: string;
 }
 
 export interface AuthUser {

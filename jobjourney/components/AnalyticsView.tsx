@@ -132,7 +132,7 @@ const AnalyticsView: React.FC<Props> = ({ applications }) => {
            {funnelStep("Total Hunt", applications.length, 100, "bg-emerald-50 dark:bg-emerald-900/10", "bg-emerald-500")}
            
            {(() => {
-             const interviewCount = applications.filter(a => [ApplicationStatus.INTERVIEWING, ApplicationStatus.OFFER, ApplicationStatus.REJECTED].includes(a.status)).length;
+             const interviewCount = applications.filter(a => [ApplicationStatus.INTERVIEWING, ApplicationStatus.OFFER].includes(a.status)).length;
              const interviewPerc = applications.length > 0 ? (interviewCount / applications.length) * 100 : 0;
              return funnelStep("Interviews Landed", interviewCount, interviewPerc, "bg-teal-50 dark:bg-teal-900/10", "bg-teal-500");
            })()}

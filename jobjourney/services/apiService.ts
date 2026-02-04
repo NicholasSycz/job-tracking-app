@@ -86,4 +86,18 @@ export const apiService = {
     if (!response.ok) throw new Error("Failed to update applications");
     return await response.json();
   },
+
+  async bulkImportApplications(applications: Partial<JobApplication>[]): Promise<{ imported: number; applications: JobApplication[] }> {
+    const tenantId = getTenantId();
+    const response = await fetch(`${API_BASE}/tenants/${tenantId}/applications/bulk`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ applications }),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: "Failed to import applications" }));
+      throw new Error(error.message || "Failed to import applications");
+    }
+    return await response.json();
+  },
 };

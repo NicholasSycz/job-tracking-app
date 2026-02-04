@@ -20,6 +20,7 @@ import SettingsView from "./components/SettingsView";
 import LoginView from "./components/LoginView";
 import JobModal from "./components/JobModal";
 import ConfirmModal from "./components/ConfirmModal";
+import BulkImportModal from "./components/BulkImportModal";
 import { apiService } from "./services/apiService";
 import { useToast } from "./contexts/ToastContext";
 import { useTheme } from "./contexts/ThemeContext";
@@ -41,6 +42,7 @@ const App: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [applicationGoal, setApplicationGoal] = useState(25);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
   // Filter applications based on search query
   const filteredApplications = applications.filter((app) => {
@@ -279,6 +281,13 @@ const App: React.FC = () => {
     }
   };
 
+  const handleBulkImport = async (applications: Partial<JobApplication>[]) => {
+    const result = await apiService.bulkImportApplications(applications);
+    setApplications((prev) => [...result.applications, ...prev]);
+    showSuccess("Import Complete", `Successfully imported ${result.imported} application${result.imported !== 1 ? 's' : ''}.`);
+    return result;
+  };
+
   const openAddModal = () => {
     setEditingJob(undefined);
     setIsModalOpen(true);
@@ -501,6 +510,7 @@ const App: React.FC = () => {
                   onDelete={handleDeleteApplication}
                   onBulkDelete={handleBulkDelete}
                   onBulkStatusUpdate={handleBulkStatusUpdate}
+                  onImport={() => setIsImportModalOpen(true)}
                   deletingIds={deletingIds}
                 />
               )}
@@ -541,6 +551,12 @@ const App: React.FC = () => {
           handleLogout();
         }}
         onCancel={() => setShowLogoutConfirm(false)}
+      />
+
+      <BulkImportModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        onImport={handleBulkImport}
       />
     </div>
   );
