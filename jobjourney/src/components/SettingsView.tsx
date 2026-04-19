@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { User, Mail, Bell, Shield, Trash2, Save, Check, Target } from 'lucide-react';
-import { AuthUser } from '../types';
+import { User, Mail, Bell, Shield, Trash2, Save, Check, Target, CheckCircle2, XCircle, Calendar } from 'lucide-react';
+import { AuthUser, MonthlyGoal } from '../types';
 import { useToast } from '../contexts/ToastContext';
 import { API_BASE_URL } from '../config';
 
@@ -8,24 +8,29 @@ interface Props {
   user: AuthUser;
   onUpdateUser: (updates: Partial<AuthUser>) => void;
   onLogout: () => void;
-  applicationGoal?: number;
-  onUpdateGoal?: (goal: number) => void;
+  currentGoal: MonthlyGoal | null;
+  goalHistory: MonthlyGoal[];
+  onUpdateGoal: (target: number) => void;
+  onUpdateGoalMet: (goalId: string, met: boolean) => void;
 }
 
-const SettingsView: React.FC<Props> = ({ user, onUpdateUser, onLogout, applicationGoal = 25, onUpdateGoal }) => {
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+const SettingsView: React.FC<Props> = ({ user, onUpdateUser, onLogout, currentGoal, goalHistory, onUpdateGoal, onUpdateGoalMet }) => {
   const { showSuccess, showError } = useToast();
   const [name, setName] = useState(user.name);
-  const [goalValue, setGoalValue] = useState(applicationGoal);
+  const [goalValue, setGoalValue] = useState(currentGoal?.target ?? 25);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
-  // Update goalValue when applicationGoal prop changes
   useEffect(() => {
-    setGoalValue(applicationGoal);
-  }, [applicationGoal]);
+    if (currentGoal) {
+      setGoalValue(currentGoal.target);
+    }
+  }, [currentGoal]);
 
   const handleSaveGoal = () => {
-    if (onUpdateGoal && goalValue !== applicationGoal) {
+    if (goalValue !== currentGoal?.target) {
       onUpdateGoal(goalValue);
     }
   };
@@ -62,6 +67,13 @@ const SettingsView: React.FC<Props> = ({ user, onUpdateUser, onLogout, applicati
       setIsSaving(false);
     }
   };
+
+  const now = new Date();
+  const currentMonth = now.getMonth() + 1;
+  const currentYear = now.getFullYear();
+
+  // Past goals (exclude current month)
+  const pastGoals = goalHistory.filter(g => !(g.month === currentMonth && g.year === currentYear));
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500 max-w-3xl">
@@ -132,15 +144,17 @@ const SettingsView: React.FC<Props> = ({ user, onUpdateUser, onLogout, applicati
         </div>
       </section>
 
-      {/* Goals Section */}
+      {/* Monthly Goal Section */}
       <section className="bg-white dark:bg-slate-950 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm transition-colors">
         <div className="flex items-center gap-3 mb-6">
           <div className="w-10 h-10 bg-purple-100 dark:bg-purple-900/30 rounded-xl flex items-center justify-center">
             <Target className="text-purple-600 dark:text-purple-400" size={20} />
           </div>
           <div>
-            <h2 className="text-lg font-bold text-slate-800 dark:text-white">Application Goal</h2>
-            <p className="text-sm text-slate-500 dark:text-slate-400">Set your target number of applications</p>
+            <h2 className="text-lg font-bold text-slate-800 dark:text-white">Monthly Goal</h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              Set your application target for {MONTH_NAMES[(currentMonth - 1)]} {currentYear}
+            </p>
           </div>
         </div>
 
@@ -161,17 +175,78 @@ const SettingsView: React.FC<Props> = ({ user, onUpdateUser, onLogout, applicati
             </div>
             <button
               onClick={handleSaveGoal}
-              disabled={goalValue === applicationGoal}
+              disabled={goalValue === currentGoal?.target}
               className="mt-6 px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 dark:disabled:bg-slate-700 text-white rounded-xl font-bold transition-all disabled:cursor-not-allowed"
             >
               Update Goal
             </button>
           </div>
           <p className="text-xs text-slate-400 dark:text-slate-500">
-            This goal will be displayed on your dashboard to help track your progress.
+            This sets your target for the current month. Past months are tracked below.
           </p>
         </div>
       </section>
+
+      {/* Goal History */}
+      {pastGoals.length > 0 && (
+        <section className="bg-white dark:bg-slate-950 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm transition-colors">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-10 h-10 bg-indigo-100 dark:bg-indigo-900/30 rounded-xl flex items-center justify-center">
+              <Calendar className="text-indigo-600 dark:text-indigo-400" size={20} />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-slate-800 dark:text-white">Goal History</h2>
+              <p className="text-sm text-slate-500 dark:text-slate-400">Track your monthly goal performance</p>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            {pastGoals.map((goal) => (
+              <div
+                key={goal.id}
+                className={`flex items-center justify-between p-4 rounded-xl border transition-colors ${
+                  goal.met
+                    ? 'bg-emerald-50 dark:bg-emerald-900/10 border-emerald-200 dark:border-emerald-800/50'
+                    : 'bg-slate-50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                    goal.met
+                      ? 'bg-emerald-100 dark:bg-emerald-900/30'
+                      : 'bg-slate-100 dark:bg-slate-800'
+                  }`}>
+                    {goal.met ? (
+                      <CheckCircle2 size={16} className="text-emerald-600 dark:text-emerald-400" />
+                    ) : (
+                      <XCircle size={16} className="text-slate-400 dark:text-slate-500" />
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                      {MONTH_NAMES[goal.month - 1]} {goal.year}
+                    </p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Target: {goal.target} applications
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => onUpdateGoalMet(goal.id, !goal.met)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                    goal.met
+                      ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                      : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600'
+                  }`}
+                >
+                  {goal.met ? 'Met' : 'Not Met'}
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Notifications Section */}
       <section className="bg-white dark:bg-slate-950 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm transition-colors">

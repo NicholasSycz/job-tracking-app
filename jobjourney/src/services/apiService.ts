@@ -1,5 +1,6 @@
-import { JobApplication } from "../types";
+import { JobApplication, MonthlyGoal } from "../types";
 import { API_URL } from "../config";
+import { API_BASE_URL } from "../config";
 
 const API_BASE = API_URL;
 
@@ -98,6 +99,46 @@ export const apiService = {
       const error = await response.json().catch(() => ({ message: "Failed to import applications" }));
       throw new Error(error.message || "Failed to import applications");
     }
+    return await response.json();
+  },
+
+  // Monthly Goals
+  async fetchCurrentGoal(): Promise<MonthlyGoal> {
+    const response = await fetch(`${API_BASE_URL}/api/goals/current`, {
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) throw new Error("Failed to fetch current goal");
+    return await response.json();
+  },
+
+  async updateCurrentGoal(target: number): Promise<MonthlyGoal> {
+    const response = await fetch(`${API_BASE_URL}/api/goals/current`, {
+      method: "PUT",
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ target }),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: "Failed to update goal" }));
+      throw new Error(error.error || error.message || "Failed to update goal");
+    }
+    return await response.json();
+  },
+
+  async fetchGoalHistory(): Promise<MonthlyGoal[]> {
+    const response = await fetch(`${API_BASE_URL}/api/goals/history`, {
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) throw new Error("Failed to fetch goal history");
+    return await response.json();
+  },
+
+  async updateGoalMet(goalId: string, met: boolean): Promise<MonthlyGoal> {
+    const response = await fetch(`${API_BASE_URL}/api/goals/${goalId}/met`, {
+      method: "PATCH",
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ met }),
+    });
+    if (!response.ok) throw new Error("Failed to update goal status");
     return await response.json();
   },
 };

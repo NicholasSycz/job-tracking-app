@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { AppError, toErrorResponse } from '../utils/errors';
+import { fileLogger } from '../utils/fileLogger';
 
 export function errorHandler(
   err: Error,
@@ -13,9 +14,22 @@ export function errorHandler(
   if (err instanceof AppError && err.isOperational) {
     // Operational errors are expected (validation, auth, etc.)
     console.error(`[${requestId}] [${err.code}] ${err.message}`);
+    fileLogger.warn(`[${err.code}] ${err.message}`, {
+      requestId: requestId ?? 'unknown',
+      code: err.code,
+      statusCode: err.statusCode,
+      path: req.originalUrl || req.url,
+      method: req.method,
+    });
   } else {
     // Programming or unknown errors - log full stack
     console.error(`[${requestId}] Unexpected error:`, err);
+    fileLogger.error(`Unexpected error: ${err.message}`, {
+      requestId: requestId ?? 'unknown',
+      path: req.originalUrl || req.url,
+      method: req.method,
+      stack: err.stack,
+    });
   }
 
   // Send response with request ID for tracking

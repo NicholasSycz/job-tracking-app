@@ -38,4 +38,15 @@ export interface AuthUser {
   avatar?: string;
 }
 
+export interface MonthlyGoal {
+  id: string;
+  userId: string;
+  month: number;
+  year: number;
+  target: number;
+  met: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type ViewType = 'dashboard' | 'applications' | 'analytics' | 'settings';

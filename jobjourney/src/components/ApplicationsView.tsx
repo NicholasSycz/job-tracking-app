@@ -274,7 +274,7 @@ const ApplicationsView: React.FC<Props> = ({
         </div>
       )}
 
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 sticky top-0 z-20 bg-slate-50 dark:bg-slate-950 py-3 -mt-3">
         <div className="flex items-center gap-2 overflow-x-auto pb-2 sm:pb-0 no-scrollbar">
           {/* Select All Checkbox */}
           {sortedAndFiltered.length > 0 && (
@@ -457,9 +457,6 @@ const ApplicationsView: React.FC<Props> = ({
                         <Square size={20} />
                       )}
                     </button>
-                    <div className="w-12 h-12 rounded-xl bg-slate-100 dark:bg-slate-900 flex items-center justify-center font-bold text-xl text-slate-400 dark:text-slate-600 transition-colors group-hover:bg-emerald-50 dark:group-hover:bg-emerald-900/20 group-hover:text-emerald-600 dark:group-hover:text-emerald-400">
-                      {job.company.charAt(0)}
-                    </div>
                   </div>
                   <div className="flex gap-1 items-center">
                     <button

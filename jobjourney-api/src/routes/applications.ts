@@ -5,6 +5,7 @@ import { AuthenticatedRequest, getParam } from "../types/auth";
 import { asyncHandler } from "../middleware/errorHandler";
 import { ForbiddenError, NotFoundError, ValidationError } from "../utils/errors";
 import { validate, schemas } from "../middleware/validate";
+import { fileLogger } from "../utils/fileLogger";
 
 const router = Router();
 
@@ -124,6 +125,7 @@ router.post("/tenants/:tenantId/applications", validate(schemas.createApplicatio
     },
   });
 
+  fileLogger.event("Application created", { userId, tenantId, company, role, jobId: job.id });
   res.status(201).json(toJobResponse(job));
 }));
 
@@ -222,6 +224,7 @@ router.post("/tenants/:tenantId/applications/bulk", asyncHandler(async (req: Aut
     return jobs;
   });
 
+  fileLogger.event("Bulk import", { userId, tenantId, count: createdJobs.length });
   res.status(201).json({
     imported: createdJobs.length,
     applications: createdJobs.map(toJobResponse),
@@ -258,6 +261,7 @@ router.delete("/tenants/:tenantId/applications/bulk", asyncHandler(async (req: A
     where: { id: { in: validIds } },
   });
 
+  fileLogger.event("Bulk delete", { userId, tenantId, count: result.count });
   res.json({ deleted: result.count });
 }));
 
@@ -301,6 +305,7 @@ router.patch("/tenants/:tenantId/applications/bulk", asyncHandler(async (req: Au
     })),
   });
 
+  fileLogger.event("Bulk status update", { userId, tenantId, count: validIds.length, status });
   res.json({ updated: validIds.length });
 }));
 
@@ -347,6 +352,8 @@ router.put("/tenants/:tenantId/applications/:id", validate(schemas.updateApplica
     },
   });
 
+  fileLogger.event("Application updated", { userId, tenantId, jobId: id, statusChanged: !!statusChanged });
+
   // Record status change in history
   if (statusChanged) {
     await prisma.jobStatusHistory.create({
@@ -390,6 +397,7 @@ router.delete("/tenants/:tenantId/applications/:id", asyncHandler(async (req: Au
     where: { id },
   });
 
+  fileLogger.event("Application deleted", { userId, tenantId, jobId: id, company: existingJob.company, role: existingJob.role });
   res.status(204).send();
 }));
 

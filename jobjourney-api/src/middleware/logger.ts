@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import { randomUUID } from "crypto";
 import { AuthRequest } from "../types/auth";
+import { fileLogger } from "../utils/fileLogger";
 
 // Sensitive fields to exclude from logging
 const SENSITIVE_FIELDS = ["password", "token", "authorization", "secret", "apikey"];
@@ -77,11 +78,16 @@ export function requestLogger(req: Request, res: Response, next: NextFunction): 
     // Log with appropriate level based on status code
     if (res.statusCode >= 500) {
       console.error(formatLog(logEntry));
+      fileLogger.error(`${req.method} ${logEntry.path} ${res.statusCode}`, logEntry as unknown as Record<string, unknown>);
     } else if (res.statusCode >= 400) {
       console.warn(formatLog(logEntry));
+      fileLogger.warn(`${req.method} ${logEntry.path} ${res.statusCode}`, logEntry as unknown as Record<string, unknown>);
     } else {
       console.log(formatLog(logEntry));
     }
+
+    // Always log request to request log file
+    fileLogger.request(`${req.method} ${logEntry.path} ${res.statusCode} ${duration}ms`, logEntry as unknown as Record<string, unknown>);
 
     // Call original end - use res instead of this to avoid implicit any
     return originalEnd.call(res, chunk, encoding as BufferEncoding, callback as () => void);

@@ -8,6 +8,7 @@ import { validate, schemas } from "../middleware/validate";
 import { asyncHandler } from "../middleware/errorHandler";
 import { ValidationError, ConflictError, UnauthorizedError, ForbiddenError, NotFoundError } from "../utils/errors";
 import { AuthenticatedRequest } from "../types/auth";
+import { fileLogger } from "../utils/fileLogger";
 import {
   JWT_SECRET,
   GOOGLE_CLIENT_ID,
@@ -79,6 +80,7 @@ router.post("/signup", validate(schemas.signup), asyncHandler(async (req, res) =
 
   const token = signToken(user.id);
 
+  fileLogger.event("User signed up", { userId: user.id, email: user.email });
   res.json({ token, user: toAuthUser(user), tenantId: tenant.id });
 }));
 
@@ -116,6 +118,7 @@ router.post("/login", validate(schemas.login), asyncHandler(async (req, res) => 
 
   const token = signToken(user.id);
 
+  fileLogger.event("User logged in", { userId: user.id, email: user.email });
   res.json({
     token,
     user: toAuthUser({
@@ -309,6 +312,8 @@ router.get("/google/callback", async (req, res) => {
     // Generate JWT token
     const token = signToken(user.id);
 
+    fileLogger.event("Google OAuth login", { userId: user.id, email: googleUser.email });
+
     // Redirect to frontend with token and tenantId
     const params = new URLSearchParams({
       token,
@@ -367,6 +372,7 @@ router.post("/forgot-password", validate(schemas.forgotPassword), asyncHandler(a
   // In production, this would send an email
   const resetLink = `${FRONTEND_URL}/reset-password?token=${token}`;
   console.log(`\n[PASSWORD RESET] Reset link for ${email}: ${resetLink}\n`);
+  fileLogger.event("Password reset requested", { email });
 
   res.json({ message: "If an account exists with that email, you will receive a password reset link." });
 }));
@@ -412,6 +418,7 @@ router.post("/reset-password", validate(schemas.resetPassword), asyncHandler(asy
     }),
   ]);
 
+  fileLogger.event("Password reset completed", { userId: resetToken.userId });
   res.json({ message: "Password has been reset successfully. You can now log in with your new password." });
 }));
 

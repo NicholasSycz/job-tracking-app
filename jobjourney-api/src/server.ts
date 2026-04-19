@@ -5,6 +5,7 @@ import cors from "cors";
 import authRoutes from "./routes/auth";
 import applicationRoutes from "./routes/applications";
 import settingsRoutes from "./routes/settings";
+import goalsRoutes from "./routes/goals";
 import { errorHandler } from "./middleware/errorHandler";
 import { PORT, isOriginAllowed, validateConfig } from "./config";
 import { authLimiter, apiLimiter } from "./middleware/rateLimit";
@@ -42,6 +43,7 @@ app.use(express.json());
 app.use("/auth", authLimiter, authRoutes);
 app.use("/api", apiLimiter, applicationRoutes);
 app.use("/api/settings", apiLimiter, settingsRoutes);
+app.use("/api/goals", apiLimiter, goalsRoutes);
 
 // Global error handler - must be last
 app.use(errorHandler);
