@@ -28,6 +28,13 @@ import { useToast } from "./contexts/ToastContext";
 import { useTheme } from "./contexts/ThemeContext";
 import { API_BASE_URL } from "./config";
 
+function getAvatarUrl(user: AuthUser): string {
+  if (user.avatarUrl) {
+    return `${API_BASE_URL}${user.avatarUrl}`;
+  }
+  return `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(user.email)}`;
+}
+
 const App: React.FC = () => {
   const { showSuccess, showError } = useToast();
   const { theme, toggleTheme } = useTheme();
@@ -366,10 +373,8 @@ const App: React.FC = () => {
         <div className="mt-auto p-4 space-y-2">
           <div className="bg-slate-50 dark:bg-slate-900/50 rounded-2xl p-3 mb-4 flex items-center gap-3 border border-slate-100 dark:border-slate-800">
             <img
-              src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(
-                user.email
-              )}`}
-              className="w-9 h-9 rounded-full bg-emerald-100 dark:bg-emerald-900/40"
+              src={getAvatarUrl(user)}
+              className="w-9 h-9 rounded-full bg-emerald-100 dark:bg-emerald-900/40 object-cover"
               alt="Avatar"
             />
 

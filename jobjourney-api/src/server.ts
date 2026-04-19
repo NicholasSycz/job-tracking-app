@@ -1,6 +1,7 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
+import path from "path";
 
 import authRoutes from "./routes/auth";
 import applicationRoutes from "./routes/applications";
@@ -38,6 +39,9 @@ app.use(
 );
 
 app.use(express.json());
+
+// Serve uploaded files (avatars, etc.)
+app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
 
 // Apply rate limiters
 app.use("/auth", authLimiter, authRoutes);

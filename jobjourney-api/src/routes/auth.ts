@@ -1,7 +1,10 @@
 import { Router } from "express";
 import { randomBytes } from "crypto";
+import fs from "fs";
+import path from "path";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import multer from "multer";
 import { prisma } from "../db";
 import { requireAuth } from "../middleware/auth";
 import { validate, schemas } from "../middleware/validate";
@@ -19,6 +22,27 @@ import {
 
 const router = Router();
 
+// Avatar upload config
+const avatarDir = path.join(__dirname, "../../uploads/avatars");
+fs.mkdirSync(avatarDir, { recursive: true });
+
+const avatarUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, avatarDir),
+    filename: (req, file, cb) => {
+      const ext = path.extname(file.originalname).toLowerCase();
+      cb(null, `${(req as AuthenticatedRequest).userId}${ext}`);
+    },
+  }),
+  limits: { fileSize: 2 * 1024 * 1024 }, // 2MB
+  fileFilter: (_req, file, cb) => {
+    const allowed = [".jpg", ".jpeg", ".png", ".webp"];
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (allowed.includes(ext)) cb(null, true);
+    else cb(new Error("Only .jpg, .jpeg, .png, .webp files are allowed"));
+  },
+});
+
 function signToken(userId: string) {
   return jwt.sign({ userId }, JWT_SECRET, { expiresIn: "7d" });
 }
@@ -28,12 +52,14 @@ function toAuthUser(user: {
   email: string;
   name: string | null;
   isActive: boolean;
+  avatarUrl?: string | null;
 }) {
   return {
     id: user.id,
     email: user.email,
     name: user.name ?? user.email.split("@")[0],
     isActive: user.isActive,
+    avatarUrl: user.avatarUrl ?? null,
   };
 }
 
@@ -65,7 +91,7 @@ router.post("/signup", validate(schemas.signup), asyncHandler(async (req, res) =
       name: name?.trim() ? name.trim() : null,
       isActive: true,
     },
-    select: { id: true, email: true, name: true, isActive: true },
+    select: { id: true, email: true, name: true, isActive: true, avatarUrl: true },
   });
 
   // Create tenant and associate user as owner
@@ -121,12 +147,7 @@ router.post("/login", validate(schemas.login), asyncHandler(async (req, res) => 
   fileLogger.event("User logged in", { userId: user.id, email: user.email });
   res.json({
     token,
-    user: toAuthUser({
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      isActive: user.isActive,
-    }),
+    user: toAuthUser(user),
     tenantId: tenantUser.tenantId,
   });
 }));
@@ -136,7 +157,7 @@ router.get("/me", requireAuth, asyncHandler(async (req: AuthenticatedRequest, re
 
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, email: true, name: true, isActive: true },
+    select: { id: true, email: true, name: true, isActive: true, avatarUrl: true },
   });
 
   if (!user) {
@@ -150,12 +171,7 @@ router.get("/me", requireAuth, asyncHandler(async (req: AuthenticatedRequest, re
   });
 
   res.json({
-    user: {
-      id: user.id,
-      email: user.email,
-      name: user.name ?? user.email.split("@")[0],
-      isActive: user.isActive,
-    },
+    user: toAuthUser(user),
     tenantId: tenantUser?.tenantId ?? null,
   });
 }));
@@ -170,12 +186,40 @@ router.put("/profile", requireAuth, validate(schemas.updateProfile), asyncHandle
     data: {
       name: name?.trim() || null,
     },
-    select: { id: true, email: true, name: true, isActive: true },
+    select: { id: true, email: true, name: true, isActive: true, avatarUrl: true },
   });
 
   res.json({
     user: toAuthUser(user),
   });
+}));
+
+// POST /auth/avatar - Upload user avatar
+router.post("/avatar", requireAuth, avatarUpload.single("avatar"), asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const userId = req.userId;
+
+  if (!req.file) {
+    throw new ValidationError("No file uploaded");
+  }
+
+  // Clean up old avatar files (different extensions)
+  const exts = [".jpg", ".jpeg", ".png", ".webp"];
+  for (const ext of exts) {
+    const oldPath = path.join(avatarDir, `${userId}${ext}`);
+    if (oldPath !== req.file.path) {
+      fs.unlink(oldPath, () => {}); // ignore errors for non-existent files
+    }
+  }
+
+  const avatarUrl = `/uploads/avatars/${req.file.filename}`;
+
+  const user = await prisma.user.update({
+    where: { id: userId },
+    data: { avatarUrl },
+    select: { id: true, email: true, name: true, isActive: true, avatarUrl: true },
+  });
+
+  res.json({ user: toAuthUser(user) });
 }));
 
 // GET /auth/google - Redirect to Google OAuth

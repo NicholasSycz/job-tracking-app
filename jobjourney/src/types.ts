@@ -35,7 +35,7 @@ export interface AuthUser {
   id: string;
   email: string;
   name: string;
-  avatar?: string;
+  avatarUrl?: string | null;
 }
 
 export interface MonthlyGoal {

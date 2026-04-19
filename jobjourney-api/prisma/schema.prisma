@@ -12,6 +12,7 @@ model User {
   passwordHash    String?
   googleId        String?  @unique
   name            String?
+  avatarUrl       String?
   applicationGoal Int      @default(25)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt

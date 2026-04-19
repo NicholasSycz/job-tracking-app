@@ -1,8 +1,15 @@
-import React, { useState, useEffect } from 'react';
-import { User, Mail, Bell, Shield, Trash2, Save, Check, Target, CheckCircle2, XCircle, Calendar } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { User, Mail, Bell, Shield, Trash2, Save, Check, Target, CheckCircle2, XCircle, Calendar, Camera } from 'lucide-react';
 import { AuthUser, MonthlyGoal } from '../types';
 import { useToast } from '../contexts/ToastContext';
 import { API_BASE_URL } from '../config';
+
+function getAvatarUrl(user: AuthUser): string {
+  if (user.avatarUrl) {
+    return `${API_BASE_URL}${user.avatarUrl}`;
+  }
+  return `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(user.email)}`;
+}
 
 interface Props {
   user: AuthUser;
@@ -22,6 +29,8 @@ const SettingsView: React.FC<Props> = ({ user, onUpdateUser, onLogout, currentGo
   const [goalValue, setGoalValue] = useState(currentGoal?.target ?? 25);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (currentGoal) {
@@ -68,6 +77,39 @@ const SettingsView: React.FC<Props> = ({ user, onUpdateUser, onLogout, currentGo
     }
   };
 
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingAvatar(true);
+    try {
+      const token = localStorage.getItem('auth_token');
+      const formData = new FormData();
+      formData.append('avatar', file);
+
+      const response = await fetch(`${API_BASE_URL}/auth/avatar`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({ error: 'Upload failed' }));
+        throw new Error(data.error || 'Failed to upload avatar');
+      }
+
+      const data = await response.json();
+      onUpdateUser({ avatarUrl: `${data.user.avatarUrl}?t=${Date.now()}` });
+      showSuccess('Avatar Updated', 'Your profile photo has been updated.');
+    } catch (err) {
+      console.error('Failed to upload avatar:', err);
+      showError('Upload Failed', err instanceof Error ? err.message : 'Unable to upload avatar.');
+    } finally {
+      setIsUploadingAvatar(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
   const now = new Date();
   const currentMonth = now.getMonth() + 1;
   const currentYear = now.getFullYear();
@@ -91,13 +133,36 @@ const SettingsView: React.FC<Props> = ({ user, onUpdateUser, onLogout, currentGo
 
         <div className="space-y-4">
           <div className="flex items-center gap-4">
-            <img
-              src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(user.email)}`}
-              className="w-16 h-16 rounded-full bg-emerald-100 dark:bg-emerald-900/40"
-              alt="Avatar"
-            />
+            <div className="relative group">
+              <img
+                src={getAvatarUrl(user)}
+                className="w-16 h-16 rounded-full bg-emerald-100 dark:bg-emerald-900/40 object-cover"
+                alt="Avatar"
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isUploadingAvatar}
+                className="absolute inset-0 rounded-full bg-slate-900/0 group-hover:bg-slate-900/50 flex items-center justify-center transition-all cursor-pointer"
+              >
+                {isUploadingAvatar ? (
+                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <Camera size={18} className="text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                )}
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".jpg,.jpeg,.png,.webp"
+                onChange={handleAvatarUpload}
+                className="hidden"
+              />
+            </div>
             <div>
-              <p className="text-sm text-slate-500 dark:text-slate-400">Your avatar is generated from your email</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                Click your avatar to upload a photo
+              </p>
+              <p className="text-xs text-slate-400 dark:text-slate-500">JPG, PNG, or WebP. Max 2MB.</p>
             </div>
           </div>
 

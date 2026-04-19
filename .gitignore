@@ -67,6 +67,9 @@ pnpm-debug.log*
 # Prisma engines/download cache (rarely checked in, but safe to ignore)
 **/.prisma/
 
+# --- Uploaded files ---
+uploads/
+
 # --- Coverage / test artifacts ---
 coverage/
 .nyc_output/
