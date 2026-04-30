@@ -17,7 +17,7 @@ afterAll(() => {
 // Clean up database before each test using transaction
 beforeEach(async () => {
   // Use raw SQL with TRUNCATE CASCADE for reliable cleanup
-  await prisma.$executeRaw`TRUNCATE TABLE "JobStatusHistory", "Job", "PasswordResetToken", "TenantUser", "Tenant", "User" CASCADE`;
+  await prisma.$executeRaw`TRUNCATE TABLE "Message", "ConversationParticipant", "Conversation", "TenantInvite", "JobStatusHistory", "Job", "PasswordResetToken", "MonthlyGoal", "TenantUser", "Tenant", "User" CASCADE`;
 });
 
 // Close database connection after all tests

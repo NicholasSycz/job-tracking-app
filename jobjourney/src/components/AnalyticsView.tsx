@@ -13,7 +13,7 @@ import {
 } from 'recharts';
 import { JobApplication, ApplicationStatus } from '../types';
 import { useTheme } from '../contexts/ThemeContext';
-import { FileText, Calendar, TrendingUp, Clock, Target, Percent } from 'lucide-react';
+import { FileText, Calendar, TrendingUp, Clock, Target, Percent, Ghost } from 'lucide-react';
 
 interface Props {
   applications: JobApplication[];
@@ -272,7 +272,7 @@ const AnalyticsView: React.FC<Props> = ({ applications }) => {
                 <ReportMetric icon={<Percent size={16} />} label="Response Rate" value={`${reportData.responseRate.toFixed(0)}%`} />
                 <ReportMetric icon={<TrendingUp size={16} />} label="Interview Rate" value={`${reportData.interviewRate.toFixed(0)}%`} />
                 <ReportMetric icon={<TrendingUp size={16} />} label="Offer Rate" value={`${reportData.offerRate.toFixed(0)}%`} />
-                <ReportMetric icon={<Clock size={16} />} label="Ghosted Rate" value={`${reportData.ghostedRate.toFixed(0)}%`} />
+                <ReportMetric icon={<Ghost size={16} />} label="Ghosted Rate" value={`${reportData.ghostedRate.toFixed(0)}%`} />
                 <ReportMetric icon={<Calendar size={16} />} label="Avg Days to Interview" value={reportData.avgDaysToInterview !== null ? `${reportData.avgDaysToInterview}d` : 'N/A'} />
               </div>
 

@@ -49,4 +49,50 @@ export interface MonthlyGoal {
   updatedAt: string;
 }
 
-export type ViewType = 'dashboard' | 'applications' | 'analytics' | 'settings';
+export type ViewType = 'dashboard' | 'applications' | 'analytics' | 'messages' | 'settings';
+
+export interface TenantMember {
+  id: string;
+  email: string;
+  name: string | null;
+  avatarUrl: string | null;
+  isActive: boolean;
+  role: string;
+  joinedAt: string;
+}
+
+export interface TenantInvite {
+  id: string;
+  tenantId: string;
+  email: string;
+  token: string;
+  link: string;
+  expiresAt: string;
+  acceptedAt: string | null;
+  createdAt: string;
+}
+
+export interface Message {
+  id: string;
+  conversationId: string;
+  senderId: string;
+  body: string;
+  createdAt: string;
+  deletedAt: string | null;
+}
+
+export interface ConversationParticipantSummary {
+  id: string;
+  email: string;
+  name: string | null;
+  avatarUrl: string | null;
+}
+
+export interface Conversation {
+  id: string;
+  tenantId: string;
+  otherParticipants: ConversationParticipantSummary[];
+  lastMessage: Message | null;
+  lastMessageAt: string | null;
+  unreadCount: number;
+}

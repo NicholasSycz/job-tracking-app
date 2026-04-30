@@ -3,6 +3,7 @@ import { User, Mail, Bell, Shield, Trash2, Save, Check, Target, CheckCircle2, XC
 import { AuthUser, MonthlyGoal } from '../types';
 import { useToast } from '../contexts/ToastContext';
 import { API_BASE_URL } from '../config';
+import MembersSettings from './MembersSettings';
 
 function getAvatarUrl(user: AuthUser): string {
   if (user.avatarUrl) {
@@ -312,6 +313,9 @@ const SettingsView: React.FC<Props> = ({ user, onUpdateUser, onLogout, currentGo
           </div>
         </section>
       )}
+
+      {/* Members Section */}
+      <MembersSettings />
 
       {/* Notifications Section */}
       <section className="bg-white dark:bg-slate-950 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm transition-colors">

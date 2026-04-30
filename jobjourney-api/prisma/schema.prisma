@@ -23,6 +23,9 @@ model User {
   jobStatusChanges JobStatusHistory[] @relation("JobStatusChangedBy")
   passwordResetTokens PasswordResetToken[]
   monthlyGoals MonthlyGoal[]
+  conversationParticipants ConversationParticipant[] @relation("ConversationParticipantUser")
+  messagesSent Message[] @relation("MessageSender")
+  invitesSent  TenantInvite[] @relation("TenantInvitesSent")
 }
 
 model PasswordResetToken {
@@ -45,8 +48,10 @@ model Tenant {
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
 
-  tenantUsers TenantUser[]
-  jobs        Job[]
+  tenantUsers   TenantUser[]
+  jobs          Job[]
+  conversations Conversation[]
+  invites       TenantInvite[]
 }
 
 model TenantUser {
@@ -147,4 +152,68 @@ model JobStatusHistory {
   @@index([jobId])
   @@index([status])
   @@index([changedAt])
+}
+
+model Conversation {
+  id            String    @id @default(uuid())
+  tenantId      String
+  lastMessageAt DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  tenant       Tenant                    @relation(fields: [tenantId], references: [id])
+  participants ConversationParticipant[]
+  messages     Message[]
+
+  @@index([tenantId])
+  @@index([lastMessageAt])
+}
+
+model ConversationParticipant {
+  id             String    @id @default(uuid())
+  conversationId String
+  userId         String
+  lastReadAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User         @relation("ConversationParticipantUser", fields: [userId], references: [id])
+
+  @@unique([conversationId, userId])
+  @@index([userId])
+}
+
+model Message {
+  id             String    @id @default(uuid())
+  conversationId String
+  senderId       String
+  body           String
+  createdAt      DateTime  @default(now())
+  deletedAt      DateTime?
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User         @relation("MessageSender", fields: [senderId], references: [id])
+
+  @@index([conversationId, createdAt])
+  @@index([senderId])
+}
+
+model TenantInvite {
+  id              String    @id @default(uuid())
+  tenantId        String
+  email           String
+  token           String    @unique
+  invitedByUserId String
+  expiresAt       DateTime
+  acceptedAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  tenant    Tenant @relation(fields: [tenantId], references: [id])
+  invitedBy User   @relation("TenantInvitesSent", fields: [invitedByUserId], references: [id])
+
+  @@index([tenantId])
+  @@index([email])
+  @@index([token])
 }

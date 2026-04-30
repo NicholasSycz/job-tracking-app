@@ -335,4 +335,37 @@ export const schemas = {
       maxLength: 100,
     },
   },
+
+  createMessage: {
+    body: {
+      type: 'string' as const,
+      required: true,
+      minLength: 1,
+      maxLength: 5000,
+    },
+  },
+
+  createConversation: {
+    recipientUserId: {
+      type: 'string' as const,
+      required: true,
+      minLength: 1,
+    },
+  },
+
+  createInvite: {
+    email: {
+      type: 'string' as const,
+      required: true,
+      pattern: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+    },
+  },
+
+  acceptInvite: {
+    token: {
+      type: 'string' as const,
+      required: true,
+      minLength: 1,
+    },
+  },
 };

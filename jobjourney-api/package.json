@@ -38,5 +38,8 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage"
+  },
+    "prisma": {
+    "seed": "ts-node prisma/seed.ts"
   }
 }

@@ -5,12 +5,13 @@ import { API_BASE_URL } from "../config";
 
 interface Props {
   onLogin: (user: AuthUser) => void;
+  inviteToken?: string | null;
 }
 
 type AuthMode = "login" | "signup" | "forgot-password" | "reset-password";
 
-const LoginView: React.FC<Props> = ({ onLogin }) => {
-  const [mode, setMode] = useState<AuthMode>("login");
+const LoginView: React.FC<Props> = ({ onLogin, inviteToken }) => {
+  const [mode, setMode] = useState<AuthMode>(inviteToken ? "signup" : "login");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -59,7 +60,7 @@ const LoginView: React.FC<Props> = ({ onLogin }) => {
           break;
         case "signup":
           endpoint = "/auth/signup";
-          body = { name, email, password };
+          body = { name, email, password, ...(inviteToken ? { inviteToken } : {}) };
           break;
         case "forgot-password":
           endpoint = "/auth/forgot-password";
@@ -136,7 +137,9 @@ const LoginView: React.FC<Props> = ({ onLogin }) => {
           </h1>
           <p className="text-slate-500 dark:text-slate-400">
             {mode === "login" && "Your career milestone starts here."}
-            {mode === "signup" && "Start your professional voyage today."}
+            {mode === "signup" && (inviteToken
+              ? "You've been invited — create an account to join the workspace."
+              : "Start your professional voyage today.")}
             {mode === "forgot-password" && "Enter your email to reset your password."}
             {mode === "reset-password" && "Create a new password for your account."}
           </p>

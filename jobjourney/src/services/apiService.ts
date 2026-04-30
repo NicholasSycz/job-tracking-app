@@ -1,4 +1,11 @@
-import { JobApplication, MonthlyGoal } from "../types";
+import {
+  JobApplication,
+  MonthlyGoal,
+  TenantMember,
+  TenantInvite,
+  Conversation,
+  Message,
+} from "../types";
 import { API_URL } from "../config";
 import { API_BASE_URL } from "../config";
 
@@ -140,5 +147,141 @@ export const apiService = {
     });
     if (!response.ok) throw new Error("Failed to update goal status");
     return await response.json();
+  },
+
+  // Tenant members
+  async fetchTenantMembers(): Promise<TenantMember[]> {
+    const tenantId = getTenantId();
+    const response = await fetch(`${API_BASE}/tenants/${tenantId}/members`, {
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) throw new Error("Failed to fetch tenant members");
+    return await response.json();
+  },
+
+  // Invites
+  async fetchInvites(): Promise<TenantInvite[]> {
+    const tenantId = getTenantId();
+    const response = await fetch(`${API_BASE}/tenants/${tenantId}/invites`, {
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) throw new Error("Failed to fetch invites");
+    return await response.json();
+  },
+
+  async createInvite(email: string): Promise<TenantInvite> {
+    const tenantId = getTenantId();
+    const response = await fetch(`${API_BASE}/tenants/${tenantId}/invites`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ email }),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: "Failed to create invite" }));
+      throw new Error(error.error || "Failed to create invite");
+    }
+    return await response.json();
+  },
+
+  async revokeInvite(inviteId: string): Promise<void> {
+    const tenantId = getTenantId();
+    const response = await fetch(`${API_BASE}/tenants/${tenantId}/invites/${inviteId}`, {
+      method: "DELETE",
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) throw new Error("Failed to revoke invite");
+  },
+
+  async acceptInvite(token: string): Promise<{ tenantId: string }> {
+    const response = await fetch(`${API_BASE_URL}/auth/invite/accept`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ token }),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: "Failed to accept invite" }));
+      throw new Error(error.error || "Failed to accept invite");
+    }
+    return await response.json();
+  },
+
+  // Conversations + messages
+  async fetchConversations(): Promise<Conversation[]> {
+    const tenantId = getTenantId();
+    const response = await fetch(`${API_BASE}/tenants/${tenantId}/conversations`, {
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) throw new Error("Failed to fetch conversations");
+    return await response.json();
+  },
+
+  async createConversation(recipientUserId: string): Promise<Conversation> {
+    const tenantId = getTenantId();
+    const response = await fetch(`${API_BASE}/tenants/${tenantId}/conversations`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ recipientUserId }),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: "Failed to start conversation" }));
+      throw new Error(error.error || "Failed to start conversation");
+    }
+    return await response.json();
+  },
+
+  async fetchMessages(conversationId: string): Promise<Message[]> {
+    const tenantId = getTenantId();
+    const response = await fetch(
+      `${API_BASE}/tenants/${tenantId}/conversations/${conversationId}/messages`,
+      { headers: getAuthHeaders() }
+    );
+    if (!response.ok) throw new Error("Failed to fetch messages");
+    return await response.json();
+  },
+
+  async sendMessage(conversationId: string, body: string): Promise<Message> {
+    const tenantId = getTenantId();
+    const response = await fetch(
+      `${API_BASE}/tenants/${tenantId}/conversations/${conversationId}/messages`,
+      {
+        method: "POST",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ body }),
+      }
+    );
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: "Failed to send message" }));
+      throw new Error(error.error || "Failed to send message");
+    }
+    return await response.json();
+  },
+
+  async markConversationRead(conversationId: string): Promise<void> {
+    const tenantId = getTenantId();
+    const response = await fetch(
+      `${API_BASE}/tenants/${tenantId}/conversations/${conversationId}/read`,
+      { method: "POST", headers: getAuthHeaders() }
+    );
+    if (!response.ok) throw new Error("Failed to mark conversation as read");
+  },
+
+  async deleteMessage(messageId: string): Promise<void> {
+    const tenantId = getTenantId();
+    const response = await fetch(`${API_BASE}/tenants/${tenantId}/messages/${messageId}`, {
+      method: "DELETE",
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) throw new Error("Failed to delete message");
+  },
+
+  async fetchUnreadCount(): Promise<number> {
+    const tenantId = getTenantId();
+    const response = await fetch(
+      `${API_BASE}/tenants/${tenantId}/messages/unread-count`,
+      { headers: getAuthHeaders() }
+    );
+    if (!response.ok) throw new Error("Failed to fetch unread count");
+    const data = (await response.json()) as { count: number };
+    return data.count;
   },
 };

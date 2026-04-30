@@ -68,12 +68,47 @@ router.get("/ping", (_req, res) => {
   res.json({ ok: true, route: "auth" });
 });
 
+async function consumeInviteForUser(inviteToken: string, userId: string, userEmail: string): Promise<string | null> {
+  const invite = await prisma.tenantInvite.findUnique({ where: { token: inviteToken } });
+  if (!invite) {
+    throw new ValidationError("Invite is invalid");
+  }
+  if (invite.acceptedAt) {
+    throw new ValidationError("Invite has already been used");
+  }
+  if (invite.expiresAt < new Date()) {
+    throw new ValidationError("Invite has expired");
+  }
+  if (invite.email.toLowerCase() !== userEmail.toLowerCase()) {
+    throw new ForbiddenError("Invite was issued to a different email address");
+  }
+
+  // Attach user to the invite's tenant if not already a member.
+  const existing = await prisma.tenantUser.findUnique({
+    where: { tenantId_userId: { tenantId: invite.tenantId, userId } },
+  });
+  if (!existing) {
+    await prisma.tenantUser.create({
+      data: { tenantId: invite.tenantId, userId, role: "member" },
+    });
+  }
+
+  await prisma.tenantInvite.update({
+    where: { id: invite.id },
+    data: { acceptedAt: new Date() },
+  });
+
+  fileLogger.event("Invite accepted", { userId, tenantId: invite.tenantId });
+  return invite.tenantId;
+}
+
 // POST /auth/signup
 router.post("/signup", validate(schemas.signup), asyncHandler(async (req, res) => {
-  const { name, email, password } = req.body as {
+  const { name, email, password, inviteToken } = req.body as {
     name?: string;
     email: string;
     password: string;
+    inviteToken?: string;
   };
 
   const existing = await prisma.user.findUnique({ where: { email } });
@@ -94,21 +129,52 @@ router.post("/signup", validate(schemas.signup), asyncHandler(async (req, res) =
     select: { id: true, email: true, name: true, isActive: true, avatarUrl: true },
   });
 
-  // Create tenant and associate user as owner
-  const tenant = await prisma.tenant.create({
-    data: {
-      name: `${user.name ?? "My"} Workspace`,
-      tenantUsers: {
-        create: { userId: user.id, role: "owner" },
+  let tenantId: string;
+
+  if (inviteToken) {
+    // New user signing up via an invite: attach them to the inviting tenant instead of minting a new one.
+    const invitedTenantId = await consumeInviteForUser(inviteToken, user.id, user.email);
+    tenantId = invitedTenantId!;
+  } else {
+    // Create tenant and associate user as owner
+    const tenant = await prisma.tenant.create({
+      data: {
+        name: `${user.name ?? "My"} Workspace`,
+        tenantUsers: {
+          create: { userId: user.id, role: "owner" },
+        },
       },
-    },
-  });
+    });
+    tenantId = tenant.id;
+  }
 
   const token = signToken(user.id);
 
   fileLogger.event("User signed up", { userId: user.id, email: user.email });
-  res.json({ token, user: toAuthUser(user), tenantId: tenant.id });
+  res.json({ token, user: toAuthUser(user), tenantId });
 }));
+
+// POST /auth/invite/accept - authenticated user accepts an invite
+router.post(
+  "/invite/accept",
+  requireAuth,
+  validate(schemas.acceptInvite),
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const userId = req.userId;
+    const { token } = req.body as { token: string };
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true },
+    });
+    if (!user) {
+      throw new NotFoundError("User not found");
+    }
+
+    const tenantId = await consumeInviteForUser(token, user.id, user.email);
+    res.json({ tenantId });
+  })
+);
 
 // POST /auth/login
 router.post("/login", validate(schemas.login), asyncHandler(async (req, res) => {

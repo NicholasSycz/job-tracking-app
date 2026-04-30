@@ -13,11 +13,13 @@ import {
   Settings,
   Menu,
   X,
+  MessageSquare,
 } from "lucide-react";
 import { JobApplication, ApplicationStatus, ViewType, AuthUser, MonthlyGoal } from "./types";
 import DashboardView from "./components/DashboardView";
 import ApplicationsView from "./components/ApplicationsView";
 import AnalyticsView from "./components/AnalyticsView";
+import MessagesView from "./components/MessagesView";
 import SettingsView from "./components/SettingsView";
 import LoginView from "./components/LoginView";
 import JobModal from "./components/JobModal";
@@ -54,6 +56,8 @@ const App: React.FC = () => {
   const [goalHistory, setGoalHistory] = useState<MonthlyGoal[]>([]);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [pendingInviteToken, setPendingInviteToken] = useState<string | null>(null);
 
   // Filter applications based on search query
   const filteredApplications = applications.filter((app) => {
@@ -68,10 +72,39 @@ const App: React.FC = () => {
     );
   });
 
+  const refreshUnreadCount = async () => {
+    try {
+      const count = await apiService.fetchUnreadCount();
+      setUnreadCount(count);
+    } catch (err) {
+      console.error("Failed to fetch unread count:", err);
+    }
+  };
+
+  const acceptPendingInviteIfAny = async () => {
+    if (!pendingInviteToken) return;
+    try {
+      const { tenantId } = await apiService.acceptInvite(pendingInviteToken);
+      localStorage.setItem("tenant_id", tenantId);
+      showSuccess("Invite accepted", "You've joined the workspace.");
+    } catch (err) {
+      console.error("Failed to accept invite:", err);
+      showError(
+        "Invite error",
+        err instanceof Error ? err.message : "Unable to accept invite."
+      );
+    } finally {
+      setPendingInviteToken(null);
+    }
+  };
+
   // Handle Login
-  const handleLogin = (authenticatedUser: AuthUser) => {
+  const handleLogin = async (authenticatedUser: AuthUser) => {
     setUser(authenticatedUser);
     setIsLoading(true);
+    // If the user came in via an invite link (and logged in rather than signing up),
+    // consume it now so they join the inviting tenant before data loads.
+    await acceptPendingInviteIfAny();
     loadData();
   };
 
@@ -143,10 +176,16 @@ const App: React.FC = () => {
       const oauthToken = urlParams.get("token");
       const oauthTenantId = urlParams.get("tenantId");
       const oauthError = urlParams.get("error");
+      const inviteParam = urlParams.get("invite");
 
       // Clear URL parameters
-      if (oauthToken || oauthError) {
+      if (oauthToken || oauthError || inviteParam) {
         window.history.replaceState({}, document.title, window.location.pathname);
+      }
+
+      // Capture invite token for later acceptance (either after login, or forwarded to signup).
+      if (inviteParam) {
+        setPendingInviteToken(inviteParam);
       }
 
       // Handle OAuth error
@@ -190,6 +229,23 @@ const App: React.FC = () => {
           localStorage.setItem("tenant_id", data.tenantId);
         }
 
+        // If an invite token was in the URL, accept it now that we know the user is authed.
+        if (inviteParam) {
+          try {
+            const { tenantId } = await apiService.acceptInvite(inviteParam);
+            localStorage.setItem("tenant_id", tenantId);
+            showSuccess("Invite accepted", "You've joined the workspace.");
+          } catch (err) {
+            console.error("Failed to accept invite:", err);
+            showError(
+              "Invite error",
+              err instanceof Error ? err.message : "Unable to accept invite."
+            );
+          } finally {
+            setPendingInviteToken(null);
+          }
+        }
+
         // now fetch the real data
         await loadData();
       } catch (err) {
@@ -203,6 +259,17 @@ const App: React.FC = () => {
     restoreSession();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Poll unread messages count every 15s while logged in.
+  useEffect(() => {
+    if (!user) return;
+    refreshUnreadCount();
+    const id = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      refreshUnreadCount();
+    }, 15000);
+    return () => window.clearInterval(id);
+  }, [user]);
 
   const handleAddApplication = async (newApp: Omit<JobApplication, "id">) => {
     setIsSaving(true);
@@ -313,7 +380,7 @@ const App: React.FC = () => {
   };
 
   if (!user) {
-    return <LoginView onLogin={handleLogin} />;
+    return <LoginView onLogin={handleLogin} inviteToken={pendingInviteToken} />;
   }
 
   return (
@@ -349,11 +416,12 @@ const App: React.FC = () => {
 
           <nav className="space-y-1.5">
             {([
-              { view: "dashboard" as ViewType, icon: LayoutDashboard, label: "Dashboard" },
-              { view: "applications" as ViewType, icon: Briefcase, label: "Applications" },
-              { view: "analytics" as ViewType, icon: BarChart3, label: "Analytics" },
-              { view: "settings" as ViewType, icon: Settings, label: "Settings" },
-            ]).map(({ view, icon: Icon, label }) => (
+              { view: "dashboard" as ViewType, icon: LayoutDashboard, label: "Dashboard", badge: 0 },
+              { view: "applications" as ViewType, icon: Briefcase, label: "Applications", badge: 0 },
+              { view: "analytics" as ViewType, icon: BarChart3, label: "Analytics", badge: 0 },
+              { view: "messages" as ViewType, icon: MessageSquare, label: "Messages", badge: unreadCount },
+              { view: "settings" as ViewType, icon: Settings, label: "Settings", badge: 0 },
+            ]).map(({ view, icon: Icon, label, badge }) => (
               <button
                 key={view}
                 onClick={() => { setCurrentView(view); setIsSidebarOpen(false); }}
@@ -364,7 +432,12 @@ const App: React.FC = () => {
                 }`}
               >
                 <Icon size={20} className={currentView === view ? "text-emerald-600 dark:text-emerald-400" : ""} />
-                <span className="text-sm">{label}</span>
+                <span className="text-sm flex-1 text-left">{label}</span>
+                {badge > 0 && (
+                  <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-emerald-600 text-white text-[10px] font-black flex items-center justify-center">
+                    {badge > 99 ? "99+" : badge}
+                  </span>
+                )}
               </button>
             ))}
           </nav>
@@ -492,6 +565,12 @@ const App: React.FC = () => {
               {currentView === "analytics" && (
                 <AnalyticsView applications={filteredApplications} />
               )}
+              {currentView === "messages" && (
+                <MessagesView
+                  currentUser={user}
+                  onUnreadChange={refreshUnreadCount}
+                />
+              )}
               {currentView === "settings" && (
                 <SettingsView
                   user={user}
@@ -540,15 +619,16 @@ const App: React.FC = () => {
       <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white dark:bg-slate-950 border-t border-slate-200 dark:border-slate-800 lg:hidden">
         <div className="flex items-center justify-around py-2">
           {([
-            { view: "dashboard" as ViewType, icon: LayoutDashboard, label: "Home" },
-            { view: "applications" as ViewType, icon: Briefcase, label: "Apps" },
-            { view: "analytics" as ViewType, icon: BarChart3, label: "Analytics" },
-            { view: "settings" as ViewType, icon: Settings, label: "Settings" },
-          ]).map(({ view, icon: Icon, label }) => (
+            { view: "dashboard" as ViewType, icon: LayoutDashboard, label: "Home", badge: 0 },
+            { view: "applications" as ViewType, icon: Briefcase, label: "Apps", badge: 0 },
+            { view: "messages" as ViewType, icon: MessageSquare, label: "Messages", badge: unreadCount },
+            { view: "analytics" as ViewType, icon: BarChart3, label: "Stats", badge: 0 },
+            { view: "settings" as ViewType, icon: Settings, label: "Settings", badge: 0 },
+          ]).map(({ view, icon: Icon, label, badge }) => (
             <button
               key={view}
               onClick={() => setCurrentView(view)}
-              className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-lg transition-colors ${
+              className={`relative flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-lg transition-colors ${
                 currentView === view
                   ? "text-emerald-600 dark:text-emerald-400"
                   : "text-slate-400 dark:text-slate-500"
@@ -556,6 +636,11 @@ const App: React.FC = () => {
             >
               <Icon size={20} />
               <span className="text-[10px] font-bold">{label}</span>
+              {badge > 0 && (
+                <span className="absolute -top-1 right-0 min-w-[16px] h-4 px-1 rounded-full bg-emerald-600 text-white text-[9px] font-black flex items-center justify-center">
+                  {badge > 9 ? "9+" : badge}
+                </span>
+              )}
             </button>
           ))}
           <button
