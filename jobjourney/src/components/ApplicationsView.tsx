@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { JobApplication, ApplicationStatus } from "../types";
+import { JobApplication, ApplicationStatus, AuthUser } from "../types";
 import {
   Filter,
   Trash2,
@@ -47,6 +47,7 @@ const STATUS_ORDER: ApplicationStatus[] = [
 
 interface Props {
   applications: JobApplication[];
+  currentUser: AuthUser;
   onEdit: (job: JobApplication) => void;
   onDelete: (id: string) => void;
   onBulkDelete?: (ids: string[]) => Promise<void>;
@@ -57,6 +58,10 @@ interface Props {
   onImport?: () => void;
   deletingIds?: Set<string>;
   isLoading?: boolean;
+}
+
+function canMutate(user: AuthUser, app: { createdByUserId: string }): boolean {
+  return user.role === "owner" || app.createdByUserId === user.id;
 }
 
 // Skeleton card for loading state
@@ -81,6 +86,7 @@ const SkeletonCard: React.FC = () => (
 
 const ApplicationsView: React.FC<Props> = ({
   applications,
+  currentUser,
   onEdit,
   onDelete,
   onBulkDelete,
@@ -204,6 +210,14 @@ const ApplicationsView: React.FC<Props> = ({
     selectedIds.size === sortedAndFiltered.length;
   const hasSelection = selectedIds.size > 0;
 
+  const selectedNotMutable = applications.filter(
+    (a) => selectedIds.has(a.id) && !canMutate(currentUser, a),
+  );
+  const bulkBlockedReason =
+    selectedNotMutable.length > 0
+      ? `You can only modify applications you created. ${selectedNotMutable.length} of the selected ${selectedIds.size} were created by other members.`
+      : undefined;
+
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       {/* Bulk Action Bar */}
@@ -226,8 +240,9 @@ const ApplicationsView: React.FC<Props> = ({
             <div className="relative">
               <button
                 onClick={() => setShowBulkStatusMenu(!showBulkStatusMenu)}
-                disabled={isBulkOperating}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 text-sm font-medium hover:bg-emerald-50 dark:hover:bg-emerald-900/30 transition-colors disabled:opacity-50"
+                disabled={isBulkOperating || !!bulkBlockedReason}
+                title={bulkBlockedReason}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-300 text-sm font-medium hover:bg-emerald-50 dark:hover:bg-emerald-900/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Change Status
                 <ChevronDown
@@ -260,8 +275,9 @@ const ApplicationsView: React.FC<Props> = ({
             {/* Bulk Delete */}
             <button
               onClick={handleBulkDelete}
-              disabled={isBulkOperating}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-rose-500 hover:bg-rose-600 text-white text-sm font-medium transition-colors disabled:opacity-50"
+              disabled={isBulkOperating || !!bulkBlockedReason}
+              title={bulkBlockedReason}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-rose-500 hover:bg-rose-600 text-white text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isBulkOperating ? (
                 <Loader2 size={14} className="animate-spin" />
@@ -436,6 +452,10 @@ const ApplicationsView: React.FC<Props> = ({
           sortedAndFiltered.map((job) => {
             const isDeleting = deletingIds.has(job.id);
             const isSelected = selectedIds.has(job.id);
+            const mutable = canMutate(currentUser, job);
+            const mutateBlockedReason = mutable
+              ? undefined
+              : "Only the creator or an owner can modify this application";
             return (
               <div
                 key={job.id}
@@ -464,9 +484,10 @@ const ApplicationsView: React.FC<Props> = ({
                         e.stopPropagation();
                         onDelete(job.id);
                       }}
-                      disabled={isDeleting}
+                      disabled={isDeleting || !mutable}
+                      title={mutateBlockedReason}
                       aria-label="Delete application"
-                      className="p-2 text-slate-300 dark:text-slate-700 hover:text-rose-500 dark:hover:text-rose-400 transition-colors opacity-0 group-hover:opacity-100 disabled:opacity-50"
+                      className="p-2 text-slate-300 dark:text-slate-700 hover:text-rose-500 dark:hover:text-rose-400 transition-colors opacity-0 group-hover:opacity-100 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:text-slate-300"
                     >
                       {isDeleting ? (
                         <Loader2 size={16} className="animate-spin" />
@@ -479,8 +500,9 @@ const ApplicationsView: React.FC<Props> = ({
                 </div>
 
                 <div
-                  className="flex-1 cursor-pointer relative z-10"
-                  onClick={() => onEdit(job)}
+                  className={`flex-1 relative z-10 ${mutable ? "cursor-pointer" : "cursor-not-allowed"}`}
+                  onClick={() => mutable && onEdit(job)}
+                  title={mutateBlockedReason}
                 >
                   <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-1 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors leading-tight">
                     {job.role}

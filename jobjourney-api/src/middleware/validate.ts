@@ -373,6 +373,11 @@ export const schemas = {
       required: true,
       pattern: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
     },
+    role: {
+      type: 'string' as const,
+      required: false,
+      enum: ['owner', 'member'],
+    },
   },
 
   acceptInvite: {
@@ -380,6 +385,14 @@ export const schemas = {
       type: 'string' as const,
       required: true,
       minLength: 1,
+    },
+  },
+
+  updateMemberRole: {
+    role: {
+      type: 'string' as const,
+      required: true,
+      enum: ['owner', 'member'],
     },
   },
 };

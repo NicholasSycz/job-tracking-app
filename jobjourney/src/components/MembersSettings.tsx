@@ -1,9 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { Users, UserPlus, Copy, Check, Trash2 } from 'lucide-react';
-import { TenantMember, TenantInvite } from '../types';
+import { AuthUser, TenantInvite, TenantMember, TenantRole } from '../types';
 import { apiService } from '../services/apiService';
 import { useToast } from '../contexts/ToastContext';
 import { API_BASE_URL } from '../config';
+
+interface Props {
+  currentUser: AuthUser;
+}
 
 function memberAvatar(member: { email: string; avatarUrl: string | null }): string {
   if (member.avatarUrl) return `${API_BASE_URL}${member.avatarUrl}`;
@@ -15,13 +19,25 @@ function formatDate(iso: string): string {
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-const MembersSettings: React.FC = () => {
+const ROLE_BADGE_CLASSES: Record<TenantRole, string> = {
+  owner:
+    'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400',
+  member:
+    'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400',
+};
+
+const MembersSettings: React.FC<Props> = ({ currentUser }) => {
   const { showSuccess, showError } = useToast();
   const [members, setMembers] = useState<TenantMember[]>([]);
   const [invites, setInvites] = useState<TenantInvite[]>([]);
   const [email, setEmail] = useState('');
+  const [inviteRole, setInviteRole] = useState<TenantRole>('member');
   const [isInviting, setIsInviting] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [pendingActionUserId, setPendingActionUserId] = useState<string | null>(null);
+
+  const isOwner = currentUser.role === 'owner';
+  const ownerCount = members.filter((m) => m.role === 'owner').length;
 
   const load = async () => {
     try {
@@ -44,12 +60,14 @@ const MembersSettings: React.FC = () => {
 
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isOwner) return;
     const trimmed = email.trim().toLowerCase();
     if (!trimmed) return;
     setIsInviting(true);
     try {
-      const invite = await apiService.createInvite(trimmed);
+      const invite = await apiService.createInvite(trimmed, inviteRole);
       setEmail('');
+      setInviteRole('member');
       setInvites((prev) => {
         const without = prev.filter((i) => i.id !== invite.id);
         return [invite, ...without];
@@ -76,6 +94,7 @@ const MembersSettings: React.FC = () => {
   };
 
   const handleRevoke = async (invite: TenantInvite) => {
+    if (!isOwner) return;
     try {
       await apiService.revokeInvite(invite.id);
       setInvites((prev) => prev.filter((i) => i.id !== invite.id));
@@ -87,6 +106,43 @@ const MembersSettings: React.FC = () => {
       );
     }
   };
+
+  const handleChangeRole = async (member: TenantMember, role: TenantRole) => {
+    if (!isOwner || member.role === role) return;
+    setPendingActionUserId(member.id);
+    try {
+      await apiService.updateMemberRole(member.id, role);
+      setMembers((prev) => prev.map((m) => (m.id === member.id ? { ...m, role } : m)));
+      showSuccess('Role updated', `${member.email} is now ${role}.`);
+    } catch (err) {
+      showError(
+        'Update failed',
+        err instanceof Error ? err.message : 'Unable to change role.'
+      );
+    } finally {
+      setPendingActionUserId(null);
+    }
+  };
+
+  const handleRemove = async (member: TenantMember) => {
+    if (!isOwner) return;
+    if (!window.confirm(`Remove ${member.email} from this workspace?`)) return;
+    setPendingActionUserId(member.id);
+    try {
+      await apiService.removeMember(member.id);
+      setMembers((prev) => prev.filter((m) => m.id !== member.id));
+      showSuccess('Member removed', `${member.email} no longer has access.`);
+    } catch (err) {
+      showError(
+        'Remove failed',
+        err instanceof Error ? err.message : 'Unable to remove member.'
+      );
+    } finally {
+      setPendingActionUserId(null);
+    }
+  };
+
+  const inviteDisabledReason = !isOwner ? 'Only owners can invite members' : undefined;
 
   return (
     <section className="bg-white dark:bg-slate-950 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm transition-colors">
@@ -103,17 +159,32 @@ const MembersSettings: React.FC = () => {
       </div>
 
       {/* Invite form */}
-      <form onSubmit={handleInvite} className="flex flex-col sm:flex-row gap-3 mb-6">
+      <form
+        onSubmit={handleInvite}
+        className="flex flex-col sm:flex-row gap-3 mb-6"
+        title={inviteDisabledReason}
+      >
         <input
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="teammate@example.com"
-          className="flex-1 px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:border-emerald-500 dark:focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 dark:focus:ring-emerald-900/20 rounded-xl outline-none transition-all text-slate-800 dark:text-slate-200 text-sm"
+          disabled={!isOwner}
+          className="flex-1 px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:border-emerald-500 dark:focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 dark:focus:ring-emerald-900/20 rounded-xl outline-none transition-all text-slate-800 dark:text-slate-200 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
         />
+        <select
+          value={inviteRole}
+          onChange={(e) => setInviteRole(e.target.value as TenantRole)}
+          disabled={!isOwner}
+          className="px-3 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-800 dark:text-slate-200 text-sm outline-none focus:border-emerald-500 dark:focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 dark:focus:ring-emerald-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <option value="member">Member</option>
+          <option value="owner">Owner</option>
+        </select>
         <button
           type="submit"
-          disabled={isInviting || !email.trim()}
+          disabled={!isOwner || isInviting || !email.trim()}
+          title={inviteDisabledReason}
           className="flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 dark:disabled:bg-slate-700 text-white px-5 py-2.5 rounded-xl font-bold text-sm transition-colors disabled:cursor-not-allowed"
         >
           {isInviting ? (
@@ -131,29 +202,76 @@ const MembersSettings: React.FC = () => {
           Current members
         </h3>
         <ul className="space-y-2">
-          {members.map((m) => (
-            <li
-              key={m.id}
-              className="flex items-center justify-between gap-3 p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/40"
-            >
-              <div className="flex items-center gap-3 min-w-0">
-                <img
-                  src={memberAvatar(m)}
-                  alt=""
-                  className="w-9 h-9 rounded-full bg-emerald-100 dark:bg-emerald-900/40 object-cover"
-                />
-                <div className="min-w-0">
-                  <p className="text-sm font-bold text-slate-800 dark:text-slate-200 truncate">
-                    {m.name || m.email.split('@')[0]}
-                  </p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{m.email}</p>
+          {members.map((m) => {
+            const isSelf = m.id === currentUser.id;
+            const isLastOwner = m.role === 'owner' && ownerCount <= 1;
+            const removeDisabledReason = !isOwner
+              ? 'Only owners can remove members'
+              : isLastOwner
+                ? 'Cannot remove the last owner'
+                : undefined;
+            const roleSelectDisabled =
+              !isOwner || pendingActionUserId === m.id || (m.role === 'owner' && isLastOwner);
+            const roleSelectReason = !isOwner
+              ? "Only owners can change a member's role"
+              : isLastOwner && m.role === 'owner'
+                ? 'Cannot demote the last owner'
+                : undefined;
+
+            return (
+              <li
+                key={m.id}
+                className="flex items-center justify-between gap-3 p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/40"
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <img
+                    src={memberAvatar(m)}
+                    alt=""
+                    className="w-9 h-9 rounded-full bg-emerald-100 dark:bg-emerald-900/40 object-cover"
+                  />
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-slate-800 dark:text-slate-200 truncate">
+                      {m.name || m.email.split('@')[0]}
+                      {isSelf && (
+                        <span className="ml-2 text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">
+                          You
+                        </span>
+                      )}
+                    </p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{m.email}</p>
+                  </div>
                 </div>
-              </div>
-              <span className="px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 text-[10px] font-black uppercase tracking-widest">
-                {m.role}
-              </span>
-            </li>
-          ))}
+                <div className="flex items-center gap-2">
+                  {isOwner ? (
+                    <select
+                      value={m.role}
+                      onChange={(e) => handleChangeRole(m, e.target.value as TenantRole)}
+                      disabled={roleSelectDisabled}
+                      title={roleSelectReason}
+                      className="px-2 py-1 rounded-md border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs font-bold text-slate-700 dark:text-slate-300 disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      <option value="member">Member</option>
+                      <option value="owner">Owner</option>
+                    </select>
+                  ) : (
+                    <span
+                      className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-widest ${ROLE_BADGE_CLASSES[m.role]}`}
+                    >
+                      {m.role}
+                    </span>
+                  )}
+                  <button
+                    onClick={() => handleRemove(m)}
+                    disabled={!isOwner || isLastOwner || pendingActionUserId === m.id}
+                    title={removeDisabledReason}
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-400 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </li>
+            );
+          })}
         </ul>
       </div>
 
@@ -178,6 +296,11 @@ const MembersSettings: React.FC = () => {
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
+                  <span
+                    className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-widest ${ROLE_BADGE_CLASSES[invite.role]}`}
+                  >
+                    {invite.role}
+                  </span>
                   <button
                     onClick={() => handleCopy(invite)}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-800 text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors"
@@ -187,8 +310,9 @@ const MembersSettings: React.FC = () => {
                   </button>
                   <button
                     onClick={() => handleRevoke(invite)}
-                    className="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-colors"
-                    title="Revoke invite"
+                    disabled={!isOwner}
+                    title={!isOwner ? 'Only owners can revoke invites' : 'Revoke invite'}
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-400 disabled:cursor-not-allowed transition-colors"
                   >
                     <Trash2 size={14} />
                   </button>

@@ -18,6 +18,7 @@ export interface JobApplication {
   dateApplied: string;
   description: string;
   location: string;
+  createdByUserId: string;
   salary?: string;
   link?: string;
   notes?: string;
@@ -31,11 +32,16 @@ export interface JobApplication {
   interviewReminderSentAt?: string;
 }
 
+export type TenantRole = 'owner' | 'member';
+
+export type JobApplicationCreateInput = Omit<JobApplication, 'id' | 'createdByUserId'>;
+
 export interface AuthUser {
   id: string;
   email: string;
   name: string;
   avatarUrl?: string | null;
+  role: TenantRole | null;
 }
 
 export interface MonthlyGoal {
@@ -57,7 +63,7 @@ export interface TenantMember {
   name: string | null;
   avatarUrl: string | null;
   isActive: boolean;
-  role: string;
+  role: TenantRole;
   joinedAt: string;
 }
 
@@ -67,6 +73,7 @@ export interface TenantInvite {
   email: string;
   token: string;
   link: string;
+  role: TenantRole;
   expiresAt: string;
   acceptedAt: string | null;
   createdAt: string;

@@ -362,7 +362,7 @@ const SettingsView: React.FC<Props> = ({ user, onUpdateUser, onLogout, currentGo
       )}
 
       {/* Members Section */}
-      <MembersSettings />
+      <MembersSettings currentUser={user} />
 
       {/* Notifications Section */}
       <section className="bg-white dark:bg-slate-950 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm transition-colors">

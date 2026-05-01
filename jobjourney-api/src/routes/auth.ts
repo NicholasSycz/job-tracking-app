@@ -68,6 +68,35 @@ router.get("/ping", (_req, res) => {
   res.json({ ok: true, route: "auth" });
 });
 
+// Silently attach `userId` to every non-expired, unaccepted invite addressed to `email`.
+// Returns the list of tenant IDs the user newly joined (excludes tenants they were already in).
+async function consumePendingInvitesForEmail(userId: string, email: string): Promise<string[]> {
+  const lower = email.toLowerCase();
+  const now = new Date();
+  const invites = await prisma.tenantInvite.findMany({
+    where: { email: lower, acceptedAt: null, expiresAt: { gt: now } },
+  });
+
+  const newlyJoined: string[] = [];
+  for (const invite of invites) {
+    const existing = await prisma.tenantUser.findUnique({
+      where: { tenantId_userId: { tenantId: invite.tenantId, userId } },
+    });
+    if (!existing) {
+      await prisma.tenantUser.create({
+        data: { tenantId: invite.tenantId, userId, role: invite.role },
+      });
+      newlyJoined.push(invite.tenantId);
+    }
+    await prisma.tenantInvite.update({
+      where: { id: invite.id },
+      data: { acceptedAt: now },
+    });
+    fileLogger.event("Invite auto-accepted", { userId, tenantId: invite.tenantId, role: invite.role });
+  }
+  return newlyJoined;
+}
+
 async function consumeInviteForUser(inviteToken: string, userId: string, userEmail: string): Promise<string | null> {
   const invite = await prisma.tenantInvite.findUnique({ where: { token: inviteToken } });
   if (!invite) {
@@ -89,7 +118,7 @@ async function consumeInviteForUser(inviteToken: string, userId: string, userEma
   });
   if (!existing) {
     await prisma.tenantUser.create({
-      data: { tenantId: invite.tenantId, userId, role: "member" },
+      data: { tenantId: invite.tenantId, userId, role: invite.role },
     });
   }
 
@@ -98,7 +127,7 @@ async function consumeInviteForUser(inviteToken: string, userId: string, userEma
     data: { acceptedAt: new Date() },
   });
 
-  fileLogger.event("Invite accepted", { userId, tenantId: invite.tenantId });
+  fileLogger.event("Invite accepted", { userId, tenantId: invite.tenantId, role: invite.role });
   return invite.tenantId;
 }
 
@@ -129,14 +158,21 @@ router.post("/signup", validate(schemas.signup), asyncHandler(async (req, res) =
     select: { id: true, email: true, name: true, isActive: true, avatarUrl: true },
   });
 
-  let tenantId: string;
+  let tenantId: string | null = null;
 
   if (inviteToken) {
-    // New user signing up via an invite: attach them to the inviting tenant instead of minting a new one.
-    const invitedTenantId = await consumeInviteForUser(inviteToken, user.id, user.email);
-    tenantId = invitedTenantId!;
-  } else {
-    // Create tenant and associate user as owner
+    // Explicit invite-link flow: attach to the inviting tenant.
+    tenantId = await consumeInviteForUser(inviteToken, user.id, user.email);
+  }
+
+  // Auto-join any other tenants that have a pending invite for this email.
+  const autoJoined = await consumePendingInvitesForEmail(user.id, user.email);
+  if (!tenantId && autoJoined.length > 0) {
+    tenantId = autoJoined[0];
+  }
+
+  if (!tenantId) {
+    // No invites at all: create the user's personal workspace as owner.
     const tenant = await prisma.tenant.create({
       data: {
         name: `${user.name ?? "My"} Workspace`,
@@ -148,10 +184,15 @@ router.post("/signup", validate(schemas.signup), asyncHandler(async (req, res) =
     tenantId = tenant.id;
   }
 
+  const tenantUser = await prisma.tenantUser.findUnique({
+    where: { tenantId_userId: { tenantId, userId: user.id } },
+    select: { role: true },
+  });
+
   const token = signToken(user.id);
 
   fileLogger.event("User signed up", { userId: user.id, email: user.email });
-  res.json({ token, user: toAuthUser(user), tenantId });
+  res.json({ token, user: toAuthUser(user), tenantId, role: tenantUser?.role ?? null });
 }));
 
 // POST /auth/invite/accept - authenticated user accepts an invite
@@ -198,10 +239,13 @@ router.post("/login", validate(schemas.login), asyncHandler(async (req, res) => 
     throw new UnauthorizedError("Invalid email or password");
   }
 
+  // Auto-join any tenants that invited this email since they last logged in.
+  await consumePendingInvitesForEmail(user.id, user.email);
+
   // Get the user's tenant
   const tenantUser = await prisma.tenantUser.findFirst({
     where: { userId: user.id },
-    select: { tenantId: true },
+    select: { tenantId: true, role: true },
   });
 
   if (!tenantUser) {
@@ -215,6 +259,7 @@ router.post("/login", validate(schemas.login), asyncHandler(async (req, res) => 
     token,
     user: toAuthUser(user),
     tenantId: tenantUser.tenantId,
+    role: tenantUser.role,
   });
 }));
 
@@ -233,12 +278,13 @@ router.get("/me", requireAuth, asyncHandler(async (req: AuthenticatedRequest, re
   // Get the user's tenant
   const tenantUser = await prisma.tenantUser.findFirst({
     where: { userId: user.id },
-    select: { tenantId: true },
+    select: { tenantId: true, role: true },
   });
 
   res.json({
     user: toAuthUser(user),
     tenantId: tenantUser?.tenantId ?? null,
+    role: tenantUser?.role ?? null,
   });
 }));
 
@@ -365,7 +411,7 @@ router.get("/google/callback", async (req, res) => {
       },
     });
 
-    let tenantId: string;
+    let tenantId: string | null = null;
 
     if (user) {
       // Update googleId if not set (user signed up with email first)
@@ -374,27 +420,6 @@ router.get("/google/callback", async (req, res) => {
           where: { id: user.id },
           data: { googleId: googleUser.id },
         });
-      }
-
-      // Get existing tenant
-      const tenantUser = await prisma.tenantUser.findFirst({
-        where: { userId: user.id },
-        select: { tenantId: true },
-      });
-
-      if (!tenantUser) {
-        // Create tenant for existing user without one
-        const tenant = await prisma.tenant.create({
-          data: {
-            name: `${googleUser.name ?? "My"} Workspace`,
-            tenantUsers: {
-              create: { userId: user.id, role: "owner" },
-            },
-          },
-        });
-        tenantId = tenant.id;
-      } else {
-        tenantId = tenantUser.tenantId;
       }
     } else {
       // Create new user
@@ -406,8 +431,22 @@ router.get("/google/callback", async (req, res) => {
           isActive: true,
         },
       });
+    }
 
-      // Create tenant for new user
+    // Auto-join any tenants that have a pending invite for this email.
+    const autoJoined = await consumePendingInvitesForEmail(user.id, user.email);
+
+    // Pick an active tenant: prefer an existing membership, fall back to a freshly auto-joined one.
+    const tenantUser = await prisma.tenantUser.findFirst({
+      where: { userId: user.id },
+      select: { tenantId: true },
+    });
+    if (tenantUser) {
+      tenantId = tenantUser.tenantId;
+    } else if (autoJoined.length > 0) {
+      tenantId = autoJoined[0];
+    } else {
+      // No existing tenant and no invites: create the user's personal workspace.
       const tenant = await prisma.tenant.create({
         data: {
           name: `${googleUser.name ?? "My"} Workspace`,

@@ -1,8 +1,10 @@
 import {
   JobApplication,
+  JobApplicationCreateInput,
   MonthlyGoal,
   TenantMember,
   TenantInvite,
+  TenantRole,
   Conversation,
   Message,
 } from "../types";
@@ -38,7 +40,7 @@ export const apiService = {
   },
 
   async createApplication(
-    application: Omit<JobApplication, "id">
+    application: JobApplicationCreateInput
   ): Promise<JobApplication> {
     const tenantId = getTenantId();
     const response = await fetch(`${API_BASE}/tenants/${tenantId}/applications`, {
@@ -169,12 +171,12 @@ export const apiService = {
     return await response.json();
   },
 
-  async createInvite(email: string): Promise<TenantInvite> {
+  async createInvite(email: string, role: TenantRole = "member"): Promise<TenantInvite> {
     const tenantId = getTenantId();
     const response = await fetch(`${API_BASE}/tenants/${tenantId}/invites`, {
       method: "POST",
       headers: getAuthHeaders(),
-      body: JSON.stringify({ email }),
+      body: JSON.stringify({ email, role }),
     });
     if (!response.ok) {
       const error = await response.json().catch(() => ({ error: "Failed to create invite" }));
@@ -190,6 +192,32 @@ export const apiService = {
       headers: getAuthHeaders(),
     });
     if (!response.ok) throw new Error("Failed to revoke invite");
+  },
+
+  async updateMemberRole(userId: string, role: TenantRole): Promise<{ id: string; role: TenantRole }> {
+    const tenantId = getTenantId();
+    const response = await fetch(`${API_BASE}/tenants/${tenantId}/members/${userId}`, {
+      method: "PATCH",
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ role }),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: "Failed to update member role" }));
+      throw new Error(error.error || error.message || "Failed to update member role");
+    }
+    return await response.json();
+  },
+
+  async removeMember(userId: string): Promise<void> {
+    const tenantId = getTenantId();
+    const response = await fetch(`${API_BASE}/tenants/${tenantId}/members/${userId}`, {
+      method: "DELETE",
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: "Failed to remove member" }));
+      throw new Error(error.error || error.message || "Failed to remove member");
+    }
   },
 
   async changePassword(currentPassword: string, newPassword: string): Promise<void> {

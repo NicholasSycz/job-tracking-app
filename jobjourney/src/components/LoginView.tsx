@@ -105,8 +105,8 @@ const LoginView: React.FC<Props> = ({ onLogin, inviteToken }) => {
         localStorage.setItem("tenant_id", data.tenantId);
       }
 
-      // data.user should match your AuthUser type
-      onLogin(data.user as AuthUser);
+      // Merge tenant role onto the user; backend returns it alongside the user object.
+      onLogin({ ...(data.user as AuthUser), role: data.role ?? null });
     } catch (err) {
       console.error(err);
       setError("Network error. Is the backend running?");

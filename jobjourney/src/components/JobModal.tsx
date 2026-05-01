@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { X, Save, Link2, MapPin, DollarSign, Calendar, Briefcase, Loader2, Bell, Clock, Video } from 'lucide-react';
-import { JobApplication, ApplicationStatus } from '../types';
+import { JobApplication, JobApplicationCreateInput, ApplicationStatus } from '../types';
 import StatusHistory from './StatusHistory';
 
 interface Props {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (job: JobApplication | Omit<JobApplication, "id">) => Promise<void>;
+  onSave: (job: JobApplication | JobApplicationCreateInput) => Promise<void>;
   editingJob?: JobApplication;
   isSaving?: boolean;
 }

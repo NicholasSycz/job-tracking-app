@@ -15,7 +15,7 @@ import {
   X,
   MessageSquare,
 } from "lucide-react";
-import { JobApplication, ApplicationStatus, ViewType, AuthUser, MonthlyGoal } from "./types";
+import { JobApplication, JobApplicationCreateInput, ApplicationStatus, ViewType, AuthUser, MonthlyGoal } from "./types";
 import DashboardView from "./components/DashboardView";
 import ApplicationsView from "./components/ApplicationsView";
 import AnalyticsView from "./components/AnalyticsView";
@@ -222,7 +222,7 @@ const App: React.FC = () => {
         }
 
         const data = await res.json();
-        setUser(data.user as AuthUser);
+        setUser({ ...(data.user as AuthUser), role: data.role ?? null });
 
         // Store tenantId from session restore
         if (data.tenantId) {
@@ -271,7 +271,7 @@ const App: React.FC = () => {
     return () => window.clearInterval(id);
   }, [user]);
 
-  const handleAddApplication = async (newApp: Omit<JobApplication, "id">) => {
+  const handleAddApplication = async (newApp: JobApplicationCreateInput) => {
     setIsSaving(true);
     try {
       const savedApp = await apiService.createApplication(newApp);
@@ -306,11 +306,11 @@ const App: React.FC = () => {
     }
   };
 
-  const handleSaveApplication = async (job: JobApplication | Omit<JobApplication, "id">) => {
+  const handleSaveApplication = async (job: JobApplication | JobApplicationCreateInput) => {
     if ("id" in job && job.id) {
       await handleUpdateApplication(job as JobApplication);
     } else {
-      await handleAddApplication(job as Omit<JobApplication, "id">);
+      await handleAddApplication(job as JobApplicationCreateInput);
     }
   };
 
@@ -554,6 +554,7 @@ const App: React.FC = () => {
               {currentView === "applications" && (
                 <ApplicationsView
                   applications={filteredApplications}
+                  currentUser={user}
                   onEdit={openEditModal}
                   onDelete={handleDeleteApplication}
                   onBulkDelete={handleBulkDelete}

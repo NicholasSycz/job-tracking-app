@@ -1,6 +1,8 @@
 import { Router } from "express";
+import { TenantRole } from "@prisma/client";
 import { prisma } from "../db";
 import { requireAuth } from "../middleware/auth";
+import { requireTenantMember } from "../middleware/tenantAuth";
 import { AuthenticatedRequest, getParam } from "../types/auth";
 import { asyncHandler } from "../middleware/errorHandler";
 import { ForbiddenError, NotFoundError, ValidationError } from "../utils/errors";
@@ -13,16 +15,8 @@ const router = Router();
 // All routes require authentication
 router.use(requireAuth);
 
-// Helper to verify user belongs to tenant
-async function verifyTenantAccess(userId: string, tenantId: string): Promise<void> {
-  const tenantUser = await prisma.tenantUser.findUnique({
-    where: {
-      tenantId_userId: { tenantId, userId },
-    },
-  });
-  if (!tenantUser) {
-    throw new ForbiddenError("Access denied to this tenant");
-  }
+function canMutateJob(role: TenantRole | undefined, userId: string, job: { createdByUserId: string }): boolean {
+  return role === TenantRole.owner || job.createdByUserId === userId;
 }
 
 // Transform job to frontend format
@@ -37,6 +31,7 @@ function toJobResponse(job: {
   salary: string | null;
   link: string | null;
   notes: string | null;
+  createdByUserId: string;
   source?: string | null;
   externalJobId?: string | null;
   followUpDate?: Date | null;
@@ -57,6 +52,7 @@ function toJobResponse(job: {
     salary: job.salary ?? undefined,
     link: job.link ?? undefined,
     notes: job.notes ?? undefined,
+    createdByUserId: job.createdByUserId,
     source: job.source ?? undefined,
     externalJobId: job.externalJobId ?? undefined,
     followUpDate: job.followUpDate?.toISOString() ?? undefined,
@@ -69,11 +65,8 @@ function toJobResponse(job: {
 }
 
 // GET /api/tenants/:tenantId/applications - List all applications for tenant
-router.get("/tenants/:tenantId/applications", asyncHandler(async (req: AuthenticatedRequest, res) => {
+router.get("/tenants/:tenantId/applications", requireTenantMember, asyncHandler(async (req: AuthenticatedRequest, res) => {
   const tenantId = getParam(req.params.tenantId);
-  const userId = req.userId;
-
-  await verifyTenantAccess(userId, tenantId);
 
   const jobs = await prisma.job.findMany({
     where: { tenantId },
@@ -85,11 +78,9 @@ router.get("/tenants/:tenantId/applications", asyncHandler(async (req: Authentic
 }));
 
 // POST /api/tenants/:tenantId/applications - Create new application
-router.post("/tenants/:tenantId/applications", validate(schemas.createApplication), asyncHandler(async (req: AuthenticatedRequest, res) => {
+router.post("/tenants/:tenantId/applications", requireTenantMember, validate(schemas.createApplication), asyncHandler(async (req: AuthenticatedRequest, res) => {
   const tenantId = getParam(req.params.tenantId);
   const userId = req.userId;
-
-  await verifyTenantAccess(userId, tenantId);
 
   const { company, role, status, dateApplied, description, location, salary, link, notes, source, externalJobId, followUpDate, reminderEnabled, interviewDate, interviewReminderEnabled } = req.body;
 
@@ -133,7 +124,7 @@ router.post("/tenants/:tenantId/applications", validate(schemas.createApplicatio
 // BULK ROUTES - Must be defined before /:id routes to avoid matching "bulk" as an id
 
 // POST /api/tenants/:tenantId/applications/bulk - Bulk import applications
-router.post("/tenants/:tenantId/applications/bulk", asyncHandler(async (req: AuthenticatedRequest, res) => {
+router.post("/tenants/:tenantId/applications/bulk", requireTenantMember, asyncHandler(async (req: AuthenticatedRequest, res) => {
   const tenantId = getParam(req.params.tenantId);
   const userId = req.userId;
   const { applications } = req.body as { applications: Array<{
@@ -153,8 +144,6 @@ router.post("/tenants/:tenantId/applications/bulk", asyncHandler(async (req: Aut
     interviewDate?: string;
     interviewReminderEnabled?: boolean;
   }> };
-
-  await verifyTenantAccess(userId, tenantId);
 
   if (!applications || !Array.isArray(applications) || applications.length === 0) {
     throw new ValidationError("No applications provided");
@@ -238,12 +227,10 @@ router.post("/tenants/:tenantId/applications/bulk", asyncHandler(async (req: Aut
 }));
 
 // DELETE /api/tenants/:tenantId/applications/bulk - Bulk delete applications
-router.delete("/tenants/:tenantId/applications/bulk", asyncHandler(async (req: AuthenticatedRequest, res) => {
+router.delete("/tenants/:tenantId/applications/bulk", requireTenantMember, asyncHandler(async (req: AuthenticatedRequest, res) => {
   const tenantId = getParam(req.params.tenantId);
   const userId = req.userId;
   const { ids } = req.body as { ids: string[] };
-
-  await verifyTenantAccess(userId, tenantId);
 
   if (!ids || !Array.isArray(ids) || ids.length === 0) {
     throw new ValidationError("No application IDs provided");
@@ -252,8 +239,18 @@ router.delete("/tenants/:tenantId/applications/bulk", asyncHandler(async (req: A
   // Verify all jobs belong to tenant
   const jobs = await prisma.job.findMany({
     where: { id: { in: ids }, tenantId },
-    select: { id: true },
+    select: { id: true, createdByUserId: true },
   });
+
+  // Non-owners can only delete applications they created.
+  if (req.tenantRole !== TenantRole.owner) {
+    const notOwned = jobs.filter((j) => j.createdByUserId !== userId);
+    if (notOwned.length > 0) {
+      throw new ForbiddenError(
+        `You can only delete applications you created. ${notOwned.length} of the selected ${jobs.length} were created by other members.`
+      );
+    }
+  }
 
   const validIds = jobs.map((j) => j.id);
 
@@ -272,12 +269,10 @@ router.delete("/tenants/:tenantId/applications/bulk", asyncHandler(async (req: A
 }));
 
 // PATCH /api/tenants/:tenantId/applications/bulk - Bulk update application status
-router.patch("/tenants/:tenantId/applications/bulk", asyncHandler(async (req: AuthenticatedRequest, res) => {
+router.patch("/tenants/:tenantId/applications/bulk", requireTenantMember, asyncHandler(async (req: AuthenticatedRequest, res) => {
   const tenantId = getParam(req.params.tenantId);
   const userId = req.userId;
   const { ids, status } = req.body as { ids: string[]; status: string };
-
-  await verifyTenantAccess(userId, tenantId);
 
   if (!ids || !Array.isArray(ids) || ids.length === 0) {
     throw new ValidationError("No application IDs provided");
@@ -291,6 +286,16 @@ router.patch("/tenants/:tenantId/applications/bulk", asyncHandler(async (req: Au
   const jobs = await prisma.job.findMany({
     where: { id: { in: ids }, tenantId },
   });
+
+  // Non-owners can only bulk-update applications they created.
+  if (req.tenantRole !== TenantRole.owner) {
+    const notOwned = jobs.filter((j) => j.createdByUserId !== userId);
+    if (notOwned.length > 0) {
+      throw new ForbiddenError(
+        `You can only modify applications you created. ${notOwned.length} of the selected ${jobs.length} were created by other members.`
+      );
+    }
+  }
 
   const validIds = jobs.map((j) => j.id);
 
@@ -316,12 +321,10 @@ router.patch("/tenants/:tenantId/applications/bulk", asyncHandler(async (req: Au
 }));
 
 // PUT /api/tenants/:tenantId/applications/:id - Update application
-router.put("/tenants/:tenantId/applications/:id", validate(schemas.updateApplication), asyncHandler(async (req: AuthenticatedRequest, res) => {
+router.put("/tenants/:tenantId/applications/:id", requireTenantMember, validate(schemas.updateApplication), asyncHandler(async (req: AuthenticatedRequest, res) => {
   const tenantId = getParam(req.params.tenantId);
   const id = getParam(req.params.id);
   const userId = req.userId;
-
-  await verifyTenantAccess(userId, tenantId);
 
   // Verify job exists and belongs to tenant
   const existingJob = await prisma.job.findFirst({
@@ -330,6 +333,10 @@ router.put("/tenants/:tenantId/applications/:id", validate(schemas.updateApplica
 
   if (!existingJob) {
     throw new NotFoundError("Application not found");
+  }
+
+  if (!canMutateJob(req.tenantRole, userId, existingJob)) {
+    throw new ForbiddenError("You can only modify applications you created");
   }
 
   const { company, role, status, dateApplied, description, location, salary, link, notes, source, externalJobId, followUpDate, reminderEnabled, interviewDate, interviewReminderEnabled } = req.body;
@@ -377,12 +384,10 @@ router.put("/tenants/:tenantId/applications/:id", validate(schemas.updateApplica
 }));
 
 // DELETE /api/tenants/:tenantId/applications/:id - Delete application
-router.delete("/tenants/:tenantId/applications/:id", asyncHandler(async (req: AuthenticatedRequest, res) => {
+router.delete("/tenants/:tenantId/applications/:id", requireTenantMember, asyncHandler(async (req: AuthenticatedRequest, res) => {
   const tenantId = getParam(req.params.tenantId);
   const id = getParam(req.params.id);
   const userId = req.userId;
-
-  await verifyTenantAccess(userId, tenantId);
 
   // Verify job exists and belongs to tenant
   const existingJob = await prisma.job.findFirst({
@@ -391,6 +396,10 @@ router.delete("/tenants/:tenantId/applications/:id", asyncHandler(async (req: Au
 
   if (!existingJob) {
     throw new NotFoundError("Application not found");
+  }
+
+  if (!canMutateJob(req.tenantRole, userId, existingJob)) {
+    throw new ForbiddenError("You can only delete applications you created");
   }
 
   // Delete status history first (due to foreign key constraint)
@@ -408,12 +417,9 @@ router.delete("/tenants/:tenantId/applications/:id", asyncHandler(async (req: Au
 }));
 
 // GET /api/tenants/:tenantId/applications/:id/history - Get status history for an application
-router.get("/tenants/:tenantId/applications/:id/history", asyncHandler(async (req: AuthenticatedRequest, res) => {
+router.get("/tenants/:tenantId/applications/:id/history", requireTenantMember, asyncHandler(async (req: AuthenticatedRequest, res) => {
   const tenantId = getParam(req.params.tenantId);
   const id = getParam(req.params.id);
-  const userId = req.userId;
-
-  await verifyTenantAccess(userId, tenantId);
 
   // Verify job exists and belongs to tenant
   const job = await prisma.job.findFirst({
@@ -446,11 +452,8 @@ router.get("/tenants/:tenantId/applications/:id/history", asyncHandler(async (re
 }));
 
 // GET /api/tenants/:tenantId/applications/check-duplicate - Check if job already exists
-router.get("/tenants/:tenantId/applications/check-duplicate", asyncHandler(async (req: AuthenticatedRequest, res) => {
+router.get("/tenants/:tenantId/applications/check-duplicate", requireTenantMember, asyncHandler(async (req: AuthenticatedRequest, res) => {
   const tenantId = getParam(req.params.tenantId);
-  const userId = req.userId;
-
-  await verifyTenantAccess(userId, tenantId);
 
   const { externalJobId, link } = req.query;
 
@@ -478,11 +481,8 @@ router.get("/tenants/:tenantId/applications/check-duplicate", asyncHandler(async
 }));
 
 // GET /api/tenants/:tenantId/reminders/pending - Get jobs with pending reminders
-router.get("/tenants/:tenantId/reminders/pending", asyncHandler(async (req: AuthenticatedRequest, res) => {
+router.get("/tenants/:tenantId/reminders/pending", requireTenantMember, asyncHandler(async (req: AuthenticatedRequest, res) => {
   const tenantId = getParam(req.params.tenantId);
-  const userId = req.userId;
-
-  await verifyTenantAccess(userId, tenantId);
 
   const now = new Date();
 
@@ -526,12 +526,10 @@ router.get("/tenants/:tenantId/reminders/pending", asyncHandler(async (req: Auth
 }));
 
 // POST /api/tenants/:tenantId/applications/:id/reminder-sent - Mark reminder as sent
-router.post("/tenants/:tenantId/applications/:id/reminder-sent", asyncHandler(async (req: AuthenticatedRequest, res) => {
+router.post("/tenants/:tenantId/applications/:id/reminder-sent", requireTenantMember, asyncHandler(async (req: AuthenticatedRequest, res) => {
   const tenantId = getParam(req.params.tenantId);
   const id = getParam(req.params.id);
   const userId = req.userId;
-
-  await verifyTenantAccess(userId, tenantId);
 
   // Verify job exists and belongs to tenant
   const existingJob = await prisma.job.findFirst({
@@ -540,6 +538,10 @@ router.post("/tenants/:tenantId/applications/:id/reminder-sent", asyncHandler(as
 
   if (!existingJob) {
     throw new NotFoundError("Application not found");
+  }
+
+  if (!canMutateJob(req.tenantRole, userId, existingJob)) {
+    throw new ForbiddenError("You can only modify applications you created");
   }
 
   await prisma.job.update({
@@ -551,12 +553,10 @@ router.post("/tenants/:tenantId/applications/:id/reminder-sent", asyncHandler(as
 }));
 
 // PATCH /api/tenants/:tenantId/applications/:id/reminder - Update reminder settings
-router.patch("/tenants/:tenantId/applications/:id/reminder", asyncHandler(async (req: AuthenticatedRequest, res) => {
+router.patch("/tenants/:tenantId/applications/:id/reminder", requireTenantMember, asyncHandler(async (req: AuthenticatedRequest, res) => {
   const tenantId = getParam(req.params.tenantId);
   const id = getParam(req.params.id);
   const userId = req.userId;
-
-  await verifyTenantAccess(userId, tenantId);
 
   // Verify job exists and belongs to tenant
   const existingJob = await prisma.job.findFirst({
@@ -565,6 +565,10 @@ router.patch("/tenants/:tenantId/applications/:id/reminder", asyncHandler(async 
 
   if (!existingJob) {
     throw new NotFoundError("Application not found");
+  }
+
+  if (!canMutateJob(req.tenantRole, userId, existingJob)) {
+    throw new ForbiddenError("You can only modify applications you created");
   }
 
   const { followUpDate, reminderEnabled, reminderSentAt } = req.body;

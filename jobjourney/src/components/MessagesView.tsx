@@ -337,6 +337,7 @@ const MessagesView: React.FC<Props> = ({ currentUser, onUnreadChange }) => {
                     messages.map((m) => {
                       const isMine = m.senderId === currentUser.id;
                       const isDeleted = !!m.deletedAt;
+                      const canDelete = isMine || currentUser.role === 'owner';
                       return (
                         <div
                           key={m.id}
@@ -363,11 +364,11 @@ const MessagesView: React.FC<Props> = ({ currentUser, onUnreadChange }) => {
                                 {formatTimestamp(m.createdAt)}
                               </div>
                             </div>
-                            {isMine && !isDeleted && (
+                            {canDelete && !isDeleted && (
                               <button
                                 onClick={() => handleDelete(m.id)}
                                 disabled={deletingMessageId === m.id}
-                                title="Delete message"
+                                title={isMine ? 'Delete message' : 'Delete message (owner)'}
                                 className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 disabled:opacity-40"
                               >
                                 <Trash2 size={14} />

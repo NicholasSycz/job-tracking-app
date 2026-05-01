@@ -1,6 +1,8 @@
 import { Router } from "express";
+import { TenantRole } from "@prisma/client";
 import { prisma } from "../db";
 import { requireAuth } from "../middleware/auth";
+import { requireTenantMember } from "../middleware/tenantAuth";
 import { AuthenticatedRequest, getParam } from "../types/auth";
 import { asyncHandler } from "../middleware/errorHandler";
 import { ForbiddenError, NotFoundError, ValidationError } from "../utils/errors";
@@ -10,15 +12,6 @@ import { fileLogger } from "../utils/fileLogger";
 const router = Router();
 
 router.use(requireAuth);
-
-async function verifyTenantAccess(userId: string, tenantId: string): Promise<void> {
-  const tenantUser = await prisma.tenantUser.findUnique({
-    where: { tenantId_userId: { tenantId, userId } },
-  });
-  if (!tenantUser) {
-    throw new ForbiddenError("Access denied to this tenant");
-  }
-}
 
 async function verifyParticipant(conversationId: string, userId: string, tenantId: string) {
   const conversation = await prisma.conversation.findFirst({
@@ -54,11 +47,9 @@ function toMessageResponse(m: {
 }
 
 // GET /api/tenants/:tenantId/conversations
-router.get("/tenants/:tenantId/conversations", asyncHandler(async (req: AuthenticatedRequest, res) => {
+router.get("/tenants/:tenantId/conversations", requireTenantMember, asyncHandler(async (req: AuthenticatedRequest, res) => {
   const tenantId = getParam(req.params.tenantId);
   const userId = req.userId;
-
-  await verifyTenantAccess(userId, tenantId);
 
   const myParticipations = await prisma.conversationParticipant.findMany({
     where: {
@@ -131,6 +122,7 @@ router.get("/tenants/:tenantId/conversations", asyncHandler(async (req: Authenti
 // POST /api/tenants/:tenantId/conversations - find or create 1:1 conversation
 router.post(
   "/tenants/:tenantId/conversations",
+  requireTenantMember,
   validate(schemas.createConversation),
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     const tenantId = getParam(req.params.tenantId);
@@ -140,8 +132,6 @@ router.post(
     if (recipientUserId === userId) {
       throw new ValidationError("Cannot start a conversation with yourself");
     }
-
-    await verifyTenantAccess(userId, tenantId);
     // Recipient must also belong to the same tenant.
     const recipientMembership = await prisma.tenantUser.findUnique({
       where: { tenantId_userId: { tenantId, userId: recipientUserId } },
@@ -229,12 +219,12 @@ router.post(
 // GET /api/tenants/:tenantId/conversations/:id/messages
 router.get(
   "/tenants/:tenantId/conversations/:id/messages",
+  requireTenantMember,
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     const tenantId = getParam(req.params.tenantId);
     const conversationId = getParam(req.params.id);
     const userId = req.userId;
 
-    await verifyTenantAccess(userId, tenantId);
     await verifyParticipant(conversationId, userId, tenantId);
 
     const messages = await prisma.message.findMany({
@@ -250,6 +240,7 @@ router.get(
 // POST /api/tenants/:tenantId/conversations/:id/messages
 router.post(
   "/tenants/:tenantId/conversations/:id/messages",
+  requireTenantMember,
   validate(schemas.createMessage),
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     const tenantId = getParam(req.params.tenantId);
@@ -257,7 +248,6 @@ router.post(
     const userId = req.userId;
     const { body } = req.body as { body: string };
 
-    await verifyTenantAccess(userId, tenantId);
     await verifyParticipant(conversationId, userId, tenantId);
 
     const now = new Date();
@@ -287,12 +277,12 @@ router.post(
 // POST /api/tenants/:tenantId/conversations/:id/read
 router.post(
   "/tenants/:tenantId/conversations/:id/read",
+  requireTenantMember,
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     const tenantId = getParam(req.params.tenantId);
     const conversationId = getParam(req.params.id);
     const userId = req.userId;
 
-    await verifyTenantAccess(userId, tenantId);
     await verifyParticipant(conversationId, userId, tenantId);
 
     await prisma.conversationParticipant.update({
@@ -304,15 +294,14 @@ router.post(
   })
 );
 
-// DELETE /api/tenants/:tenantId/messages/:id - soft-delete own message
+// DELETE /api/tenants/:tenantId/messages/:id - soft-delete own message (or any message if owner)
 router.delete(
   "/tenants/:tenantId/messages/:id",
+  requireTenantMember,
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     const tenantId = getParam(req.params.tenantId);
     const id = getParam(req.params.id);
     const userId = req.userId;
-
-    await verifyTenantAccess(userId, tenantId);
 
     const message = await prisma.message.findFirst({
       where: {
@@ -323,7 +312,7 @@ router.delete(
     if (!message) {
       throw new NotFoundError("Message not found");
     }
-    if (message.senderId !== userId) {
+    if (message.senderId !== userId && req.tenantRole !== TenantRole.owner) {
       throw new ForbiddenError("You can only delete your own messages");
     }
     if (message.deletedAt) {
@@ -344,11 +333,10 @@ router.delete(
 // GET /api/tenants/:tenantId/messages/unread-count
 router.get(
   "/tenants/:tenantId/messages/unread-count",
+  requireTenantMember,
   asyncHandler(async (req: AuthenticatedRequest, res) => {
     const tenantId = getParam(req.params.tenantId);
     const userId = req.userId;
-
-    await verifyTenantAccess(userId, tenantId);
 
     const participations = await prisma.conversationParticipant.findMany({
       where: {

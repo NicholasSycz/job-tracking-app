@@ -55,17 +55,23 @@ model Tenant {
 }
 
 model TenantUser {
-  id        String   @id @default(uuid())
+  id        String     @id @default(uuid())
   userId    String
-  role      String
+  role      TenantRole
   tenantId  String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
   user   User   @relation(fields: [userId], references: [id])
 
   @@unique([tenantId, userId])
+}
+
+enum TenantRole {
+  owner
+  member
+  // viewer  <-- add later for read-only role
 }
 
 enum ApplicationStatus {
@@ -200,15 +206,16 @@ model Message {
 }
 
 model TenantInvite {
-  id              String    @id @default(uuid())
+  id              String     @id @default(uuid())
   tenantId        String
   email           String
-  token           String    @unique
+  token           String     @unique
   invitedByUserId String
+  role            TenantRole @default(member)
   expiresAt       DateTime
   acceptedAt      DateTime?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
 
   tenant    Tenant @relation(fields: [tenantId], references: [id])
   invitedBy User   @relation("TenantInvitesSent", fields: [invitedByUserId], references: [id])
