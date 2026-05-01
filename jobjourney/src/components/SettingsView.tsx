@@ -3,6 +3,7 @@ import { User, Mail, Bell, Shield, Trash2, Save, Check, Target, CheckCircle2, XC
 import { AuthUser, MonthlyGoal } from '../types';
 import { useToast } from '../contexts/ToastContext';
 import { API_BASE_URL } from '../config';
+import { apiService } from '../services/apiService';
 import MembersSettings from './MembersSettings';
 
 function getAvatarUrl(user: AuthUser): string {
@@ -32,6 +33,52 @@ const SettingsView: React.FC<Props> = ({ user, onUpdateUser, onLogout, currentGo
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [isPasswordFormOpen, setIsPasswordFormOpen] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+
+  const resetPasswordForm = () => {
+    setCurrentPassword('');
+    setNewPassword('');
+    setConfirmPassword('');
+    setPasswordError(null);
+  };
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordError(null);
+
+    if (newPassword.length < 6) {
+      setPasswordError('New password must be at least 6 characters.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError('New password and confirmation do not match.');
+      return;
+    }
+    if (newPassword === currentPassword) {
+      setPasswordError('New password must be different from current password.');
+      return;
+    }
+
+    setIsChangingPassword(true);
+    try {
+      await apiService.changePassword(currentPassword, newPassword);
+      showSuccess('Password Updated', 'Your password has been changed.');
+      resetPasswordForm();
+      setIsPasswordFormOpen(false);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unable to change password.';
+      setPasswordError(message);
+      showError('Change Failed', message);
+    } finally {
+      setIsChangingPassword(false);
+    }
+  };
 
   useEffect(() => {
     if (currentGoal) {
@@ -361,14 +408,95 @@ const SettingsView: React.FC<Props> = ({ user, onUpdateUser, onLogout, currentGo
         </div>
 
         <div className="space-y-4">
-          <div className="flex items-center justify-between py-3 border-b border-slate-100 dark:border-slate-800">
-            <div>
-              <p className="font-medium text-slate-800 dark:text-slate-200">Password</p>
-              <p className="text-sm text-slate-500 dark:text-slate-400">Last changed: Never</p>
+          <div className="py-3 border-b border-slate-100 dark:border-slate-800">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="font-medium text-slate-800 dark:text-slate-200">Password</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  {isPasswordFormOpen ? 'Enter your current and new password' : 'Update the password used to sign in'}
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  if (isPasswordFormOpen) {
+                    resetPasswordForm();
+                    setIsPasswordFormOpen(false);
+                  } else {
+                    setIsPasswordFormOpen(true);
+                  }
+                }}
+                className="text-sm font-bold text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors"
+              >
+                {isPasswordFormOpen ? 'Cancel' : 'Change Password'}
+              </button>
             </div>
-            <button className="text-sm font-bold text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors">
-              Change Password
-            </button>
+
+            {isPasswordFormOpen && (
+              <form onSubmit={handleChangePassword} className="mt-4 space-y-3">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em]">
+                    Current Password
+                  </label>
+                  <input
+                    type="password"
+                    autoComplete="current-password"
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    required
+                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:border-emerald-500 dark:focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 dark:focus:ring-emerald-900/20 rounded-xl outline-none transition-all text-slate-800 dark:text-slate-200 text-sm"
+                  />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em]">
+                      New Password
+                    </label>
+                    <input
+                      type="password"
+                      autoComplete="new-password"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      required
+                      minLength={6}
+                      className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:border-emerald-500 dark:focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 dark:focus:ring-emerald-900/20 rounded-xl outline-none transition-all text-slate-800 dark:text-slate-200 text-sm"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em]">
+                      Confirm New Password
+                    </label>
+                    <input
+                      type="password"
+                      autoComplete="new-password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      required
+                      minLength={6}
+                      className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:border-emerald-500 dark:focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 dark:focus:ring-emerald-900/20 rounded-xl outline-none transition-all text-slate-800 dark:text-slate-200 text-sm"
+                    />
+                  </div>
+                </div>
+
+                {passwordError && (
+                  <p className="text-sm text-rose-600 dark:text-rose-400">{passwordError}</p>
+                )}
+
+                <div className="flex justify-end pt-2">
+                  <button
+                    type="submit"
+                    disabled={isChangingPassword || !currentPassword || !newPassword || !confirmPassword}
+                    className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 dark:disabled:bg-slate-700 text-white px-6 py-2.5 rounded-xl font-bold transition-all disabled:cursor-not-allowed"
+                  >
+                    {isChangingPassword ? (
+                      <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    ) : (
+                      <Save size={18} />
+                    )}
+                    Update Password
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
           <div className="flex items-center justify-between py-3">
             <div>

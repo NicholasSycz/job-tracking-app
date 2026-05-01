@@ -336,6 +336,20 @@ export const schemas = {
     },
   },
 
+  changePassword: {
+    currentPassword: {
+      type: 'string' as const,
+      required: true,
+      minLength: 1,
+    },
+    newPassword: {
+      type: 'string' as const,
+      required: true,
+      minLength: 6,
+      maxLength: 100,
+    },
+  },
+
   createMessage: {
     body: {
       type: 'string' as const,

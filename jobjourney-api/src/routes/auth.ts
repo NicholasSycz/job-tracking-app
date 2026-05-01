@@ -444,6 +444,55 @@ router.get("/google/status", (_req, res) => {
   });
 });
 
+// POST /auth/change-password - Change password for the authenticated user
+router.post(
+  "/change-password",
+  requireAuth,
+  validate(schemas.changePassword),
+  asyncHandler(async (req: AuthenticatedRequest, res) => {
+    const userId = req.userId;
+    const { currentPassword, newPassword } = req.body as {
+      currentPassword: string;
+      newPassword: string;
+    };
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, passwordHash: true },
+    });
+
+    if (!user) {
+      throw new NotFoundError("User not found");
+    }
+
+    if (!user.passwordHash) {
+      // OAuth-only account; no password to verify against.
+      throw new ValidationError(
+        "This account does not have a password set. Use the password reset flow to create one."
+      );
+    }
+
+    const ok = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!ok) {
+      throw new UnauthorizedError("Current password is incorrect");
+    }
+
+    if (currentPassword === newPassword) {
+      throw new ValidationError("New password must be different from current password");
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 12);
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { passwordHash },
+    });
+
+    fileLogger.event("Password changed", { userId: user.id });
+    res.json({ message: "Password changed successfully." });
+  })
+);
+
 // POST /auth/forgot-password - Request password reset
 router.post("/forgot-password", validate(schemas.forgotPassword), asyncHandler(async (req, res) => {
   const { email } = req.body as { email: string };

@@ -192,6 +192,18 @@ export const apiService = {
     if (!response.ok) throw new Error("Failed to revoke invite");
   },
 
+  async changePassword(currentPassword: string, newPassword: string): Promise<void> {
+    const response = await fetch(`${API_BASE_URL}/auth/change-password`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ currentPassword, newPassword }),
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: "Failed to change password" }));
+      throw new Error(error.error || error.message || "Failed to change password");
+    }
+  },
+
   async acceptInvite(token: string): Promise<{ tenantId: string }> {
     const response = await fetch(`${API_BASE_URL}/auth/invite/accept`, {
       method: "POST",
