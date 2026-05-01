@@ -6,6 +6,7 @@ import { asyncHandler } from "../middleware/errorHandler";
 import { ForbiddenError, NotFoundError, ValidationError } from "../utils/errors";
 import { validate, schemas } from "../middleware/validate";
 import { fileLogger } from "../utils/fileLogger";
+import type { Job } from "@prisma/client";
 
 const router = Router();
 
@@ -184,7 +185,8 @@ router.post("/tenants/:tenantId/applications/bulk", asyncHandler(async (req: Aut
 
   // Create all applications
   const createdJobs = await prisma.$transaction(async (tx) => {
-    const jobs = [];
+    const jobs: Job[] = [];
+    
     for (const app of applications) {
       const job = await tx.job.create({
         data: {
