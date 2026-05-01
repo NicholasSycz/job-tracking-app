@@ -186,7 +186,7 @@ router.post("/tenants/:tenantId/applications/bulk", asyncHandler(async (req: Aut
   // Create all applications
   const createdJobs = await prisma.$transaction(async (tx) => {
     const jobs: Job[] = [];
-    
+
     for (const app of applications) {
       const job = await tx.job.create({
         data: {
@@ -224,6 +224,10 @@ router.post("/tenants/:tenantId/applications/bulk", asyncHandler(async (req: Aut
       jobs.push(job);
     }
     return jobs;
+  },
+  {
+    timeout: 30000,
+    maxWait: 10000,
   });
 
   fileLogger.event("Bulk import", { userId, tenantId, count: createdJobs.length });
