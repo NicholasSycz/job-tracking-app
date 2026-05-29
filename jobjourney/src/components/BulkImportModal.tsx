@@ -47,8 +47,8 @@ const BulkImportModal: React.FC<Props> = ({ isOpen, onClose, onImport }) => {
         return;
       }
 
-      if (applications.length > 100) {
-        setError('Maximum 100 applications per import. Please split your file.');
+      if (applications.length > 200) {
+        setError('Maximum 200 applications per import. Please split your file.');
         return;
       }
 
@@ -166,7 +166,7 @@ const BulkImportModal: React.FC<Props> = ({ isOpen, onClose, onImport }) => {
                   Click to upload or drag and drop
                 </p>
                 <p className="text-xs text-slate-400 dark:text-slate-500">
-                  JSON file (max 100 applications)
+                  JSON file (max 200 applications)
                 </p>
                 <input
                   ref={fileInputRef}

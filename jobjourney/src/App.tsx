@@ -15,7 +15,7 @@ import {
   X,
   MessageSquare,
 } from "lucide-react";
-import { JobApplication, JobApplicationCreateInput, ApplicationStatus, ViewType, AuthUser, MonthlyGoal } from "./types";
+import { JobApplication, JobApplicationCreateInput, ApplicationStatus, ViewType, AuthUser, MonthlyGoal, UserSettings } from "./types";
 import DashboardView from "./components/DashboardView";
 import ApplicationsView from "./components/ApplicationsView";
 import AnalyticsView from "./components/AnalyticsView";
@@ -58,6 +58,7 @@ const App: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [pendingInviteToken, setPendingInviteToken] = useState<string | null>(null);
+  const [userSettings, setUserSettings] = useState<UserSettings | null>(null);
 
   // Filter applications based on search query
   const filteredApplications = applications.filter((app) => {
@@ -121,16 +122,18 @@ const App: React.FC = () => {
       const applicationsData = await apiService.fetchApplications();
       setApplications(applicationsData);
 
-      // Load goals separately so a failure doesn't block applications
+      // Load goals and settings separately so a failure doesn't block applications
       try {
-        const [goalData, historyData] = await Promise.all([
+        const [goalData, historyData, settingsData] = await Promise.all([
           apiService.fetchCurrentGoal(),
           apiService.fetchGoalHistory(),
+          apiService.fetchSettings(),
         ]);
         setCurrentGoal(goalData);
         setGoalHistory(historyData);
+        setUserSettings(settingsData);
       } catch (err) {
-        console.error("Failed to load goals:", err);
+        console.error("Failed to load goals/settings:", err);
       }
     } catch (err) {
       console.error("Backend connection failed.", err);
@@ -581,6 +584,8 @@ const App: React.FC = () => {
                   goalHistory={goalHistory}
                   onUpdateGoal={updateGoal}
                   onUpdateGoalMet={updateGoalMet}
+                  userSettings={userSettings}
+                  onUpdateSettings={setUserSettings}
                 />
               )}
             </>
@@ -594,6 +599,8 @@ const App: React.FC = () => {
         onSave={handleSaveApplication}
         editingJob={editingJob}
         isSaving={isSaving}
+        jobSources={userSettings?.jobSources ?? null}
+        recruitingServices={userSettings?.recruitingServices ?? null}
       />
 
       <ConfirmModal

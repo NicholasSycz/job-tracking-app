@@ -7,8 +7,15 @@ export enum ApplicationStatus {
   GHOSTED = 'GHOSTED'
 }
 
+export enum InterviewOutcome {
+  PENDING = 'PENDING',
+  PASSED = 'PASSED',
+  FAILED = 'FAILED',
+  DECLINED = 'DECLINED',
+}
 
-export type JobSource = 'linkedin' | 'indeed' | 'glassdoor' | 'manual' | 'extension';
+
+export type JobSource = 'other' | 'linkedin' | 'indeed' | 'ycombinator' | 'gittap' | 'gaijinpot' | 'weworkremotely' | 'extension';
 
 export interface JobApplication {
   id: string;
@@ -30,6 +37,9 @@ export interface JobApplication {
   interviewDate?: string;
   interviewReminderEnabled?: boolean;
   interviewReminderSentAt?: string;
+  interviewOutcome?: InterviewOutcome;
+  interviewNotes?: string;
+  recruitingService?: string;
 }
 
 export type TenantRole = 'owner' | 'member';
@@ -56,6 +66,12 @@ export interface MonthlyGoal {
 }
 
 export type ViewType = 'dashboard' | 'applications' | 'analytics' | 'messages' | 'settings';
+
+export interface UserSettings {
+  applicationGoal: number | null;
+  jobSources: { value: string; label: string }[] | null;
+  recruitingServices: string[] | null;
+}
 
 export interface TenantMember {
   id: string;

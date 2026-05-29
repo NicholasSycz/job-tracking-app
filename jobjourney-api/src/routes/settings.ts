@@ -2,13 +2,11 @@ import { Router } from "express";
 import { prisma } from "../db";
 import { requireAuth } from "../middleware/auth";
 import { asyncHandler } from "../middleware/errorHandler";
-import { validate } from "../middleware/validate";
-import { NotFoundError } from "../utils/errors";
+import { NotFoundError, ValidationError } from "../utils/errors";
 import { AuthenticatedRequest } from "../types/auth";
 
 const router = Router();
 
-// All routes require authentication
 router.use(requireAuth);
 
 // GET /api/settings - Get user settings
@@ -17,7 +15,7 @@ router.get("/", asyncHandler(async (req: AuthenticatedRequest, res) => {
 
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { applicationGoal: true },
+    select: { applicationGoal: true, jobSources: true, recruitingServices: true },
   });
 
   if (!user) {
@@ -26,31 +24,52 @@ router.get("/", asyncHandler(async (req: AuthenticatedRequest, res) => {
 
   res.json({
     applicationGoal: user.applicationGoal,
+    jobSources: user.jobSources ?? null,
+    recruitingServices: user.recruitingServices ?? null,
   });
 }));
 
 // PUT /api/settings - Update user settings
-router.put("/", validate({
-  applicationGoal: {
-    type: 'number' as const,
-    required: false,
-    min: 1,
-    max: 1000,
-  },
-}), asyncHandler(async (req: AuthenticatedRequest, res) => {
+router.put("/", asyncHandler(async (req: AuthenticatedRequest, res) => {
   const userId = req.userId;
-  const { applicationGoal } = req.body as { applicationGoal?: number };
+  const { applicationGoal, jobSources, recruitingServices } = req.body as {
+    applicationGoal?: number;
+    jobSources?: { value: string; label: string }[] | null;
+    recruitingServices?: string[] | null;
+  };
+
+  if (applicationGoal !== undefined) {
+    if (typeof applicationGoal !== 'number' || applicationGoal < 1 || applicationGoal > 1000) {
+      throw new ValidationError("applicationGoal must be a number between 1 and 1000");
+    }
+  }
+
+  if (jobSources !== undefined && jobSources !== null) {
+    if (!Array.isArray(jobSources)) throw new ValidationError("jobSources must be an array");
+    for (const s of jobSources) {
+      if (!s.value || !s.label) throw new ValidationError("Each job source must have a value and label");
+    }
+  }
+
+  if (recruitingServices !== undefined && recruitingServices !== null) {
+    if (!Array.isArray(recruitingServices)) throw new ValidationError("recruitingServices must be an array");
+    if (recruitingServices.some(s => typeof s !== 'string')) throw new ValidationError("recruitingServices must be an array of strings");
+  }
 
   const user = await prisma.user.update({
     where: { id: userId },
     data: {
-      applicationGoal: applicationGoal !== undefined ? applicationGoal : undefined,
+      ...(applicationGoal !== undefined && { applicationGoal }),
+      ...(jobSources !== undefined && { jobSources: jobSources ?? [] }),
+      ...(recruitingServices !== undefined && { recruitingServices: recruitingServices ?? [] }),
     },
-    select: { applicationGoal: true },
+    select: { applicationGoal: true, jobSources: true, recruitingServices: true },
   });
 
   res.json({
     applicationGoal: user.applicationGoal,
+    jobSources: user.jobSources ?? null,
+    recruitingServices: user.recruitingServices ?? null,
   });
 }));
 

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { TenantRole } from "@prisma/client";
+import { TenantRole, InterviewOutcome } from "@prisma/client";
 import { prisma } from "../db";
 import { requireAuth } from "../middleware/auth";
 import { requireTenantMember } from "../middleware/tenantAuth";
@@ -40,6 +40,9 @@ function toJobResponse(job: {
   interviewDate?: Date | null;
   interviewReminderEnabled?: boolean;
   interviewReminderSentAt?: Date | null;
+  interviewOutcome?: InterviewOutcome | null;
+  interviewNotes?: string | null;
+  recruitingService?: string | null;
 }) {
   return {
     id: job.id,
@@ -61,6 +64,9 @@ function toJobResponse(job: {
     interviewDate: job.interviewDate?.toISOString() ?? undefined,
     interviewReminderEnabled: job.interviewReminderEnabled ?? false,
     interviewReminderSentAt: job.interviewReminderSentAt?.toISOString() ?? undefined,
+    interviewOutcome: job.interviewOutcome ?? undefined,
+    interviewNotes: job.interviewNotes ?? undefined,
+    recruitingService: job.recruitingService ?? undefined,
   };
 }
 
@@ -82,7 +88,7 @@ router.post("/tenants/:tenantId/applications", requireTenantMember, validate(sch
   const tenantId = getParam(req.params.tenantId);
   const userId = req.userId;
 
-  const { company, role, status, dateApplied, description, location, salary, link, notes, source, externalJobId, followUpDate, reminderEnabled, interviewDate, interviewReminderEnabled } = req.body;
+  const { company, role, status, dateApplied, description, location, salary, link, notes, source, externalJobId, followUpDate, reminderEnabled, interviewDate, interviewReminderEnabled, interviewOutcome, interviewNotes, recruitingService } = req.body;
 
   const job = await prisma.job.create({
     data: {
@@ -103,6 +109,9 @@ router.post("/tenants/:tenantId/applications", requireTenantMember, validate(sch
       reminderEnabled: reminderEnabled || false,
       interviewDate: interviewDate ? new Date(interviewDate) : null,
       interviewReminderEnabled: interviewReminderEnabled || false,
+      interviewOutcome: interviewOutcome || null,
+      interviewNotes: interviewNotes || null,
+      recruitingService: recruitingService || null,
     },
   });
 
@@ -149,9 +158,9 @@ router.post("/tenants/:tenantId/applications/bulk", requireTenantMember, asyncHa
     throw new ValidationError("No applications provided");
   }
 
-  // Limit bulk import to 100 at a time
-  if (applications.length > 100) {
-    throw new ValidationError("Maximum 100 applications per import");
+  // Limit bulk import to 200 at a time
+  if (applications.length > 200) {
+    throw new ValidationError("Maximum 200 applications per import");
   }
 
   // Validate required fields
@@ -339,7 +348,7 @@ router.put("/tenants/:tenantId/applications/:id", requireTenantMember, validate(
     throw new ForbiddenError("You can only modify applications you created");
   }
 
-  const { company, role, status, dateApplied, description, location, salary, link, notes, source, externalJobId, followUpDate, reminderEnabled, interviewDate, interviewReminderEnabled } = req.body;
+  const { company, role, status, dateApplied, description, location, salary, link, notes, source, externalJobId, followUpDate, reminderEnabled, interviewDate, interviewReminderEnabled, interviewOutcome, interviewNotes, recruitingService } = req.body;
 
   // Track status change for history
   const statusChanged = status && status !== existingJob.status;
@@ -362,6 +371,9 @@ router.put("/tenants/:tenantId/applications/:id", requireTenantMember, validate(
       reminderEnabled: reminderEnabled !== undefined ? reminderEnabled : existingJob.reminderEnabled,
       interviewDate: interviewDate !== undefined ? (interviewDate ? new Date(interviewDate) : null) : existingJob.interviewDate,
       interviewReminderEnabled: interviewReminderEnabled !== undefined ? interviewReminderEnabled : existingJob.interviewReminderEnabled,
+      interviewOutcome: interviewOutcome !== undefined ? (interviewOutcome || null) : existingJob.interviewOutcome,
+      interviewNotes: interviewNotes !== undefined ? (interviewNotes || null) : existingJob.interviewNotes,
+      recruitingService: recruitingService !== undefined ? (recruitingService || null) : existingJob.recruitingService,
     },
   });
 
@@ -547,6 +559,32 @@ router.post("/tenants/:tenantId/applications/:id/reminder-sent", requireTenantMe
   await prisma.job.update({
     where: { id },
     data: { reminderSentAt: new Date() },
+  });
+
+  res.json({ success: true });
+}));
+
+// POST /api/tenants/:tenantId/applications/:id/interview-reminder-sent - Mark interview reminder as sent
+router.post("/tenants/:tenantId/applications/:id/interview-reminder-sent", requireTenantMember, asyncHandler(async (req: AuthenticatedRequest, res) => {
+  const tenantId = getParam(req.params.tenantId);
+  const id = getParam(req.params.id);
+  const userId = req.userId;
+
+  const existingJob = await prisma.job.findFirst({
+    where: { id, tenantId },
+  });
+
+  if (!existingJob) {
+    throw new NotFoundError("Application not found");
+  }
+
+  if (!canMutateJob(req.tenantRole, userId, existingJob)) {
+    throw new ForbiddenError("You can only modify applications you created");
+  }
+
+  await prisma.job.update({
+    where: { id },
+    data: { interviewReminderSentAt: new Date() },
   });
 
   res.json({ success: true });
