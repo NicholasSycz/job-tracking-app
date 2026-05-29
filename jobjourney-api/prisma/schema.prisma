@@ -27,7 +27,8 @@ model User {
   monthlyGoals MonthlyGoal[]
   conversationParticipants ConversationParticipant[] @relation("ConversationParticipantUser")
   messagesSent Message[] @relation("MessageSender")
-  invitesSent  TenantInvite[] @relation("TenantInvitesSent")
+  invitesSent     TenantInvite[]   @relation("TenantInvitesSent")
+  calendarEvents  CalendarEvent[]  @relation("CalendarEventsCreatedBy")
 }
 
 model PasswordResetToken {
@@ -50,10 +51,11 @@ model Tenant {
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
 
-  tenantUsers   TenantUser[]
-  jobs          Job[]
-  conversations Conversation[]
-  invites       TenantInvite[]
+  tenantUsers     TenantUser[]
+  jobs            Job[]
+  conversations   Conversation[]
+  invites         TenantInvite[]
+  calendarEvents  CalendarEvent[]
 }
 
 model TenantUser {
@@ -90,6 +92,13 @@ enum InterviewOutcome {
   PASSED
   FAILED
   DECLINED
+}
+
+enum EventType {
+  INTERVIEW
+  RECRUITER_CALL
+  NETWORKING
+  OTHER
 }
 
 model Job {
@@ -129,6 +138,7 @@ model Job {
   tenant          Tenant             @relation(fields: [tenantId], references: [id])
   createdByUser   User               @relation("JobsCreatedBy", fields: [createdByUserId], references: [id])
   statusHistory   JobStatusHistory[]
+  calendarEvents  CalendarEvent[]
 
   @@index([tenantId])
   @@index([createdByUserId])
@@ -235,4 +245,26 @@ model TenantInvite {
   @@index([tenantId])
   @@index([email])
   @@index([token])
+}
+
+model CalendarEvent {
+  id              String    @id @default(uuid())
+  tenantId        String
+  createdByUserId String
+  title           String
+  description     String?
+  startAt         DateTime
+  endAt           DateTime?
+  type            EventType @default(OTHER)
+  jobId           String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  tenant        Tenant @relation(fields: [tenantId], references: [id])
+  createdByUser User   @relation("CalendarEventsCreatedBy", fields: [createdByUserId], references: [id])
+  job           Job?   @relation(fields: [jobId], references: [id])
+
+  @@index([tenantId])
+  @@index([startAt])
+  @@index([createdByUserId])
 }

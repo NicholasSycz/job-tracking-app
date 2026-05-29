@@ -8,6 +8,8 @@ import {
   Conversation,
   Message,
   UserSettings,
+  CalendarEvent,
+  EventType,
 } from "../types";
 import { API_URL } from "../config";
 import { API_BASE_URL } from "../config";
@@ -324,6 +326,47 @@ export const apiService = {
     if (!response.ok) throw new Error("Failed to fetch unread count");
     const data = (await response.json()) as { count: number };
     return data.count;
+  },
+
+  async fetchEvents(month?: number, year?: number): Promise<CalendarEvent[]> {
+    const tenantId = getTenantId();
+    const params = month && year ? `?month=${month}&year=${year}` : "";
+    const response = await fetch(`${API_BASE}/tenants/${tenantId}/events${params}`, {
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) throw new Error("Failed to fetch events");
+    return await response.json();
+  },
+
+  async createEvent(event: { title: string; description?: string; startAt: string; endAt?: string; type?: EventType; jobId?: string }): Promise<CalendarEvent> {
+    const tenantId = getTenantId();
+    const response = await fetch(`${API_BASE}/tenants/${tenantId}/events`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify(event),
+    });
+    if (!response.ok) throw new Error("Failed to create event");
+    return await response.json();
+  },
+
+  async updateEvent(id: string, updates: Partial<{ title: string; description: string; startAt: string; endAt: string; type: EventType; jobId: string }>): Promise<CalendarEvent> {
+    const tenantId = getTenantId();
+    const response = await fetch(`${API_BASE}/tenants/${tenantId}/events/${id}`, {
+      method: "PUT",
+      headers: getAuthHeaders(),
+      body: JSON.stringify(updates),
+    });
+    if (!response.ok) throw new Error("Failed to update event");
+    return await response.json();
+  },
+
+  async deleteEvent(id: string): Promise<void> {
+    const tenantId = getTenantId();
+    const response = await fetch(`${API_BASE}/tenants/${tenantId}/events/${id}`, {
+      method: "DELETE",
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) throw new Error("Failed to delete event");
   },
 
   async fetchSettings(): Promise<UserSettings> {

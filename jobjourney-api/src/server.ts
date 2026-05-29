@@ -9,6 +9,7 @@ import settingsRoutes from "./routes/settings";
 import goalsRoutes from "./routes/goals";
 import messagesRoutes from "./routes/messages";
 import membersRoutes from "./routes/members";
+import eventsRoutes from "./routes/events";
 import { errorHandler } from "./middleware/errorHandler";
 import { PORT, isOriginAllowed, validateConfig } from "./config";
 import { authLimiter, apiLimiter } from "./middleware/rateLimit";
@@ -52,6 +53,7 @@ app.use("/api", apiLimiter, messagesRoutes);
 app.use("/api", apiLimiter, membersRoutes);
 app.use("/api/settings", apiLimiter, settingsRoutes);
 app.use("/api/goals", apiLimiter, goalsRoutes);
+app.use("/api", apiLimiter, eventsRoutes);
 
 // Global error handler - must be last
 app.use(errorHandler);

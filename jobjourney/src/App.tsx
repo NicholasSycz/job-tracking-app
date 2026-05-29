@@ -3,6 +3,7 @@ import {
   LayoutDashboard,
   Briefcase,
   BarChart3,
+  CalendarDays,
   Plus,
   Search,
   Sun,
@@ -15,11 +16,12 @@ import {
   X,
   MessageSquare,
 } from "lucide-react";
-import { JobApplication, JobApplicationCreateInput, ApplicationStatus, ViewType, AuthUser, MonthlyGoal, UserSettings } from "./types";
+import { JobApplication, JobApplicationCreateInput, ApplicationStatus, ViewType, AuthUser, MonthlyGoal, UserSettings, CalendarEvent, EventType } from "./types";
 import DashboardView from "./components/DashboardView";
 import ApplicationsView from "./components/ApplicationsView";
 import AnalyticsView from "./components/AnalyticsView";
 import MessagesView from "./components/MessagesView";
+import CalendarView from "./components/CalendarView";
 import SettingsView from "./components/SettingsView";
 import LoginView from "./components/LoginView";
 import JobModal from "./components/JobModal";
@@ -59,6 +61,7 @@ const App: React.FC = () => {
   const [unreadCount, setUnreadCount] = useState(0);
   const [pendingInviteToken, setPendingInviteToken] = useState<string | null>(null);
   const [userSettings, setUserSettings] = useState<UserSettings | null>(null);
+  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
 
   // Filter applications based on search query
   const filteredApplications = applications.filter((app) => {
@@ -122,18 +125,20 @@ const App: React.FC = () => {
       const applicationsData = await apiService.fetchApplications();
       setApplications(applicationsData);
 
-      // Load goals and settings separately so a failure doesn't block applications
+      // Load goals, settings, and calendar events separately so a failure doesn't block applications
       try {
-        const [goalData, historyData, settingsData] = await Promise.all([
+        const [goalData, historyData, settingsData, eventsData] = await Promise.all([
           apiService.fetchCurrentGoal(),
           apiService.fetchGoalHistory(),
           apiService.fetchSettings(),
+          apiService.fetchEvents(),
         ]);
         setCurrentGoal(goalData);
         setGoalHistory(historyData);
         setUserSettings(settingsData);
+        setCalendarEvents(eventsData);
       } catch (err) {
-        console.error("Failed to load goals/settings:", err);
+        console.error("Failed to load goals/settings/events:", err);
       }
     } catch (err) {
       console.error("Backend connection failed.", err);
@@ -422,6 +427,7 @@ const App: React.FC = () => {
               { view: "dashboard" as ViewType, icon: LayoutDashboard, label: "Dashboard", badge: 0 },
               { view: "applications" as ViewType, icon: Briefcase, label: "Applications", badge: 0 },
               { view: "analytics" as ViewType, icon: BarChart3, label: "Analytics", badge: 0 },
+              { view: "calendar" as ViewType, icon: CalendarDays, label: "Calendar", badge: 0 },
               { view: "messages" as ViewType, icon: MessageSquare, label: "Messages", badge: unreadCount },
               { view: "settings" as ViewType, icon: Settings, label: "Settings", badge: 0 },
             ]).map(({ view, icon: Icon, label, badge }) => (
@@ -569,6 +575,40 @@ const App: React.FC = () => {
               {currentView === "analytics" && (
                 <AnalyticsView applications={filteredApplications} />
               )}
+              {currentView === "calendar" && (
+                <CalendarView
+                  applications={applications}
+                  calendarEvents={calendarEvents}
+                  onEditJob={openEditModal}
+                  onCreateEvent={async (event) => {
+                    try {
+                      const created = await apiService.createEvent(event);
+                      setCalendarEvents(prev => [...prev, created]);
+                    } catch {
+                      showError("Save Failed", "Unable to save the event. Please try again.");
+                      throw new Error("create failed");
+                    }
+                  }}
+                  onUpdateEvent={async (id, updates) => {
+                    try {
+                      const updated = await apiService.updateEvent(id, updates);
+                      setCalendarEvents(prev => prev.map(e => e.id === id ? updated : e));
+                    } catch {
+                      showError("Save Failed", "Unable to update the event. Please try again.");
+                      throw new Error("update failed");
+                    }
+                  }}
+                  onDeleteEvent={async (id) => {
+                    try {
+                      await apiService.deleteEvent(id);
+                      setCalendarEvents(prev => prev.filter(e => e.id !== id));
+                    } catch {
+                      showError("Delete Failed", "Unable to delete the event. Please try again.");
+                      throw new Error("delete failed");
+                    }
+                  }}
+                />
+              )}
               {currentView === "messages" && (
                 <MessagesView
                   currentUser={user}
@@ -629,6 +669,7 @@ const App: React.FC = () => {
           {([
             { view: "dashboard" as ViewType, icon: LayoutDashboard, label: "Home", badge: 0 },
             { view: "applications" as ViewType, icon: Briefcase, label: "Apps", badge: 0 },
+            { view: "calendar" as ViewType, icon: CalendarDays, label: "Calendar", badge: 0 },
             { view: "messages" as ViewType, icon: MessageSquare, label: "Messages", badge: unreadCount },
             { view: "analytics" as ViewType, icon: BarChart3, label: "Stats", badge: 0 },
             { view: "settings" as ViewType, icon: Settings, label: "Settings", badge: 0 },
