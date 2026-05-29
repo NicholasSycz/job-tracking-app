@@ -51,7 +51,28 @@ const JobModal: React.FC<Props> = ({ isOpen, onClose, onSave, editingJob, isSavi
 
   useEffect(() => {
     if (editingJob) {
-      setFormData(editingJob);
+      setFormData({
+        company: editingJob.company,
+        role: editingJob.role,
+        status: editingJob.status,
+        dateApplied: editingJob.dateApplied,
+        description: editingJob.description ?? '',
+        location: editingJob.location ?? '',
+        salary: editingJob.salary ?? '',
+        link: editingJob.link ?? '',
+        notes: editingJob.notes ?? '',
+        source: editingJob.source,
+        externalJobId: editingJob.externalJobId,
+        followUpDate: editingJob.followUpDate ?? '',
+        reminderEnabled: editingJob.reminderEnabled ?? false,
+        reminderSentAt: editingJob.reminderSentAt,
+        interviewDate: editingJob.interviewDate ?? '',
+        interviewReminderEnabled: editingJob.interviewReminderEnabled ?? false,
+        interviewReminderSentAt: editingJob.interviewReminderSentAt,
+        interviewOutcome: editingJob.interviewOutcome,
+        interviewNotes: editingJob.interviewNotes ?? '',
+        recruitingService: editingJob.recruitingService ?? '',
+      });
     } else {
       setFormData({
         company: '',
