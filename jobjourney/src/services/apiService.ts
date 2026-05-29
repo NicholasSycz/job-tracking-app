@@ -7,6 +7,7 @@ import {
   TenantRole,
   Conversation,
   Message,
+  UserSettings,
 } from "../types";
 import { API_URL } from "../config";
 import { API_BASE_URL } from "../config";
@@ -323,5 +324,21 @@ export const apiService = {
     if (!response.ok) throw new Error("Failed to fetch unread count");
     const data = (await response.json()) as { count: number };
     return data.count;
+  },
+
+  async fetchSettings(): Promise<UserSettings> {
+    const response = await fetch(`${API_BASE_URL}/api/settings`, { headers: getAuthHeaders() });
+    if (!response.ok) throw new Error("Failed to fetch settings");
+    return await response.json();
+  },
+
+  async updateSettings(settings: Partial<UserSettings>): Promise<UserSettings> {
+    const response = await fetch(`${API_BASE_URL}/api/settings`, {
+      method: "PUT",
+      headers: getAuthHeaders(),
+      body: JSON.stringify(settings),
+    });
+    if (!response.ok) throw new Error("Failed to update settings");
+    return await response.json();
   },
 };

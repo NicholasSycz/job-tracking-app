@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { User, Mail, Bell, Shield, Trash2, Save, Check, Target, CheckCircle2, XCircle, Calendar, Camera } from 'lucide-react';
-import { AuthUser, MonthlyGoal } from '../types';
+import { User, Mail, Bell, Shield, Trash2, Save, Check, Target, CheckCircle2, XCircle, Calendar, Camera, Layers, Plus, X, RotateCcw } from 'lucide-react';
+import { AuthUser, MonthlyGoal, UserSettings } from '../types';
 import { useToast } from '../contexts/ToastContext';
 import { API_BASE_URL } from '../config';
 import { apiService } from '../services/apiService';
 import MembersSettings from './MembersSettings';
+import { DEFAULT_JOB_SOURCES, DEFAULT_RECRUITING_SERVICES } from '../constants';
 
 function getAvatarUrl(user: AuthUser): string {
   if (user.avatarUrl) {
@@ -21,11 +22,13 @@ interface Props {
   goalHistory: MonthlyGoal[];
   onUpdateGoal: (target: number) => void;
   onUpdateGoalMet: (goalId: string, met: boolean) => void;
+  userSettings: UserSettings | null;
+  onUpdateSettings: (settings: UserSettings) => void;
 }
 
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
-const SettingsView: React.FC<Props> = ({ user, onUpdateUser, onLogout, currentGoal, goalHistory, onUpdateGoal, onUpdateGoalMet }) => {
+const SettingsView: React.FC<Props> = ({ user, onUpdateUser, onLogout, currentGoal, goalHistory, onUpdateGoal, onUpdateGoalMet, userSettings, onUpdateSettings }) => {
   const { showSuccess, showError } = useToast();
   const [name, setName] = useState(user.name);
   const [goalValue, setGoalValue] = useState(currentGoal?.target ?? 25);
@@ -33,6 +36,79 @@ const SettingsView: React.FC<Props> = ({ user, onUpdateUser, onLogout, currentGo
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Job Sources state
+  const [jobSources, setJobSources] = useState<{ value: string; label: string }[]>(
+    userSettings?.jobSources ?? DEFAULT_JOB_SOURCES
+  );
+  const [newSourceLabel, setNewSourceLabel] = useState('');
+  const [newSourceValue, setNewSourceValue] = useState('');
+  const [isSavingSources, setIsSavingSources] = useState(false);
+
+  // Recruiting Services state
+  const [recruitingServices, setRecruitingServices] = useState<string[]>(
+    userSettings?.recruitingServices ?? DEFAULT_RECRUITING_SERVICES
+  );
+  const [newService, setNewService] = useState('');
+  const [isSavingServices, setIsSavingServices] = useState(false);
+
+  useEffect(() => {
+    if (userSettings) {
+      setJobSources(userSettings.jobSources ?? DEFAULT_JOB_SOURCES);
+      setRecruitingServices(userSettings.recruitingServices ?? DEFAULT_RECRUITING_SERVICES);
+    }
+  }, [userSettings]);
+
+  const slugify = (str: string) =>
+    str.toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+
+  const handleAddSource = () => {
+    const label = newSourceLabel.trim();
+    if (!label) return;
+    const value = newSourceValue.trim() || slugify(label);
+    if (jobSources.find(s => s.value === value)) {
+      showError('Duplicate', 'A source with that value already exists.');
+      return;
+    }
+    setJobSources(prev => [...prev, { value, label }]);
+    setNewSourceLabel('');
+    setNewSourceValue('');
+  };
+
+  const handleSaveSources = async () => {
+    setIsSavingSources(true);
+    try {
+      const updated = await apiService.updateSettings({ jobSources });
+      onUpdateSettings({ ...userSettings!, ...updated });
+      showSuccess('Saved', 'Job sources updated.');
+    } catch {
+      showError('Save Failed', 'Unable to save job sources.');
+    } finally {
+      setIsSavingSources(false);
+    }
+  };
+
+  const handleResetSources = () => setJobSources(DEFAULT_JOB_SOURCES);
+
+  const handleAddService = () => {
+    const svc = newService.trim();
+    if (!svc || recruitingServices.includes(svc)) return;
+    setRecruitingServices(prev => [...prev, svc]);
+    setNewService('');
+  };
+
+  const handleSaveServices = async () => {
+    setIsSavingServices(true);
+    try {
+      const updated = await apiService.updateSettings({ recruitingServices });
+      onUpdateSettings({ ...userSettings!, ...updated });
+      showSuccess('Saved', 'Recruiting services updated.');
+    } catch {
+      showError('Save Failed', 'Unable to save recruiting services.');
+    } finally {
+      setIsSavingServices(false);
+    }
+  };
 
   const [isPasswordFormOpen, setIsPasswordFormOpen] = useState(false);
   const [currentPassword, setCurrentPassword] = useState('');
@@ -363,6 +439,137 @@ const SettingsView: React.FC<Props> = ({ user, onUpdateUser, onLogout, currentGo
 
       {/* Members Section */}
       <MembersSettings currentUser={user} />
+
+      {/* Job Sources Section */}
+      <section className="bg-white dark:bg-slate-950 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm transition-colors">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-10 h-10 bg-violet-100 dark:bg-violet-900/30 rounded-xl flex items-center justify-center">
+            <Layers className="text-violet-600 dark:text-violet-400" size={20} />
+          </div>
+          <div className="flex-1">
+            <h2 className="text-lg font-bold text-slate-800 dark:text-white">Job Sources</h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400">Customize the job board options shown in the application form</p>
+          </div>
+          <button
+            onClick={handleResetSources}
+            className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+          >
+            <RotateCcw size={13} /> Reset to defaults
+          </button>
+        </div>
+
+        <div className="space-y-2 mb-4">
+          {jobSources.map(src => (
+            <div key={src.value} className="flex items-center justify-between px-3 py-2 bg-slate-50 dark:bg-slate-900 rounded-xl">
+              <div>
+                <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">{src.label}</span>
+                <span className="ml-2 text-xs text-slate-400 dark:text-slate-600 font-mono">{src.value}</span>
+              </div>
+              <button
+                onClick={() => setJobSources(prev => prev.filter(s => s.value !== src.value))}
+                className="p-1 text-slate-400 hover:text-rose-500 transition-colors rounded-lg"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          ))}
+        </div>
+
+        <div className="flex gap-2 mb-4">
+          <input
+            type="text"
+            placeholder="Label (e.g. Wantedly)"
+            value={newSourceLabel}
+            onChange={e => {
+              setNewSourceLabel(e.target.value);
+              setNewSourceValue(slugify(e.target.value));
+            }}
+            onKeyDown={e => e.key === 'Enter' && handleAddSource()}
+            className="flex-1 px-3 py-2 text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl outline-none focus:border-violet-400 text-slate-800 dark:text-slate-200"
+          />
+          <input
+            type="text"
+            placeholder="Value (auto)"
+            value={newSourceValue}
+            onChange={e => setNewSourceValue(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleAddSource()}
+            className="w-32 px-3 py-2 text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl outline-none focus:border-violet-400 text-slate-800 dark:text-slate-200 font-mono"
+          />
+          <button
+            onClick={handleAddSource}
+            disabled={!newSourceLabel.trim()}
+            className="px-3 py-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-40 text-white rounded-xl transition-colors"
+          >
+            <Plus size={16} />
+          </button>
+        </div>
+
+        <button
+          onClick={handleSaveSources}
+          disabled={isSavingSources}
+          className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-xl transition-colors disabled:opacity-50"
+        >
+          <Save size={15} />
+          {isSavingSources ? 'Saving…' : 'Save Sources'}
+        </button>
+      </section>
+
+      {/* Recruiting Services Section */}
+      <section className="bg-white dark:bg-slate-950 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm transition-colors">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-10 h-10 bg-indigo-100 dark:bg-indigo-900/30 rounded-xl flex items-center justify-center">
+            <User className="text-indigo-600 dark:text-indigo-400" size={20} />
+          </div>
+          <div>
+            <h2 className="text-lg font-bold text-slate-800 dark:text-white">Recruiting Services</h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400">Build your list of recruiting agencies for quick selection in the application form</p>
+          </div>
+        </div>
+
+        <div className="space-y-2 mb-4">
+          {recruitingServices.length === 0 && (
+            <p className="text-sm text-slate-400 dark:text-slate-600 italic">No services added yet. Add agencies below.</p>
+          )}
+          {recruitingServices.map(svc => (
+            <div key={svc} className="flex items-center justify-between px-3 py-2 bg-slate-50 dark:bg-slate-900 rounded-xl">
+              <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">{svc}</span>
+              <button
+                onClick={() => setRecruitingServices(prev => prev.filter(s => s !== svc))}
+                className="p-1 text-slate-400 hover:text-rose-500 transition-colors rounded-lg"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          ))}
+        </div>
+
+        <div className="flex gap-2 mb-4">
+          <input
+            type="text"
+            placeholder="e.g. Hays, Robert Half, Michael Page…"
+            value={newService}
+            onChange={e => setNewService(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleAddService()}
+            className="flex-1 px-3 py-2 text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl outline-none focus:border-indigo-400 text-slate-800 dark:text-slate-200"
+          />
+          <button
+            onClick={handleAddService}
+            disabled={!newService.trim()}
+            className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white rounded-xl transition-colors"
+          >
+            <Plus size={16} />
+          </button>
+        </div>
+
+        <button
+          onClick={handleSaveServices}
+          disabled={isSavingServices}
+          className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-xl transition-colors disabled:opacity-50"
+        >
+          <Save size={15} />
+          {isSavingServices ? 'Saving…' : 'Save Services'}
+        </button>
+      </section>
 
       {/* Notifications Section */}
       <section className="bg-white dark:bg-slate-950 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm transition-colors">

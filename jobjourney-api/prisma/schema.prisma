@@ -13,7 +13,9 @@ model User {
   googleId        String?  @unique
   name            String?
   avatarUrl       String?
-  applicationGoal Int      @default(25)
+  applicationGoal    Int   @default(25)
+  jobSources         Json? // [{ value: string; label: string }]
+  recruitingServices Json? // string[]
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   isActive        Boolean  @default(true)
@@ -83,6 +85,13 @@ enum ApplicationStatus {
   GHOSTED
 }
 
+enum InterviewOutcome {
+  PENDING
+  PASSED
+  FAILED
+  DECLINED
+}
+
 model Job {
   id              String             @id @default(uuid())
   tenantId        String
@@ -103,6 +112,9 @@ model Job {
   interviewDate            DateTime?          // Date and time of scheduled interview
   interviewReminderEnabled Boolean            @default(false)
   interviewReminderSentAt  DateTime?          // When interview reminder was sent
+  interviewOutcome         InterviewOutcome?  // Result of the interview (null = no interview yet)
+  interviewNotes           String?            // Notes taken before, during, or after the interview
+  recruitingService        String?            // Recruiting agency or service used (free text)
 
   // Extension/reminder fields
   source          String?            // 'linkedin', 'indeed', 'glassdoor', 'manual', 'extension'

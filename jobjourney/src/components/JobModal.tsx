@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, Link2, MapPin, DollarSign, Calendar, Briefcase, Loader2, Bell, Clock, Video } from 'lucide-react';
-import { JobApplication, JobApplicationCreateInput, ApplicationStatus } from '../types';
+import { X, Save, Link2, MapPin, DollarSign, Calendar, Briefcase, Loader2, Bell, Clock, Video, CheckCircle2, XCircle, MinusCircle } from 'lucide-react';
+import { JobApplication, JobApplicationCreateInput, ApplicationStatus, InterviewOutcome, JobSource } from '../types';
+import { DEFAULT_JOB_SOURCES, DEFAULT_RECRUITING_SERVICES } from '../constants';
 import StatusHistory from './StatusHistory';
 
 interface Props {
@@ -9,6 +10,8 @@ interface Props {
   onSave: (job: JobApplication | JobApplicationCreateInput) => Promise<void>;
   editingJob?: JobApplication;
   isSaving?: boolean;
+  jobSources?: { value: string; label: string }[] | null;
+  recruitingServices?: string[] | null;
 }
 
 // Helper to convert ISO string to datetime-local input format (YYYY-MM-DDTHH:mm)
@@ -24,7 +27,9 @@ const toDatetimeLocalValue = (isoString: string | undefined): string => {
   return `${year}-${month}-${day}T${hours}:${minutes}`;
 };
 
-const JobModal: React.FC<Props> = ({ isOpen, onClose, onSave, editingJob, isSaving = false }) => {
+const JobModal: React.FC<Props> = ({ isOpen, onClose, onSave, editingJob, isSaving = false, jobSources, recruitingServices }) => {
+  const resolvedSources = jobSources ?? DEFAULT_JOB_SOURCES;
+  const resolvedServices = recruitingServices ?? DEFAULT_RECRUITING_SERVICES;
   const [formData, setFormData] = useState<Partial<JobApplication>>({
     company: '',
     role: '',
@@ -39,6 +44,9 @@ const JobModal: React.FC<Props> = ({ isOpen, onClose, onSave, editingJob, isSavi
     reminderEnabled: false,
     interviewDate: '',
     interviewReminderEnabled: false,
+    interviewOutcome: undefined,
+    interviewNotes: '',
+    recruitingService: '',
   });
 
   useEffect(() => {
@@ -59,6 +67,9 @@ const JobModal: React.FC<Props> = ({ isOpen, onClose, onSave, editingJob, isSavi
         reminderEnabled: false,
         interviewDate: '',
         interviewReminderEnabled: false,
+        interviewOutcome: undefined,
+        interviewNotes: '',
+        recruitingService: '',
       });
     }
   }, [editingJob, isOpen]);
@@ -97,6 +108,9 @@ const JobModal: React.FC<Props> = ({ isOpen, onClose, onSave, editingJob, isSavi
           reminderEnabled: formData.reminderEnabled,
           interviewDate: interviewDateISO,
           interviewReminderEnabled: formData.interviewReminderEnabled,
+          interviewOutcome: formData.interviewOutcome,
+          interviewNotes: formData.interviewNotes,
+          recruitingService: formData.recruitingService,
         });
       }
       // Only close if save was successful
@@ -148,7 +162,7 @@ const JobModal: React.FC<Props> = ({ isOpen, onClose, onSave, editingJob, isSavi
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-6">
+          <div className="grid grid-cols-3 gap-6">
              <div className="space-y-2">
                 <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em]">Status</label>
                 <select
@@ -164,11 +178,34 @@ const JobModal: React.FC<Props> = ({ isOpen, onClose, onSave, editingJob, isSavi
                 </select>
              </div>
              <div className="space-y-2">
+                <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em]">Source</label>
+                <input
+                  type="text"
+                  list="job-sources-datalist"
+                  value={resolvedSources.find(s => s.value === formData.source)?.label ?? formData.source ?? ''}
+                  onChange={e => {
+                    const typed = e.target.value;
+                    const match = resolvedSources.find(s => s.label === typed);
+                    setFormData(p => ({ ...p, source: (match?.value ?? typed) as JobSource }));
+                  }}
+                  placeholder="Select or type a source…"
+                  className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:border-emerald-500 dark:focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 dark:focus:ring-emerald-900/20 rounded-xl outline-none transition-all text-slate-800 dark:text-slate-200 text-sm"
+                />
+                <datalist id="job-sources-datalist">
+                  {resolvedSources.map(({ value, label }) => (
+                    <option key={value} value={label} />
+                  ))}
+                  {formData.source === 'extension' && !resolvedSources.find(s => s.value === 'extension') && (
+                    <option value="Extension" />
+                  )}
+                </datalist>
+             </div>
+             <div className="space-y-2">
                 <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em]">Application Date</label>
                 <div className="relative">
                   <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-600" size={16} />
-                  <input 
-                    type="date" 
+                  <input
+                    type="date"
                     value={formData.dateApplied}
                     onChange={e => setFormData(p => ({ ...p, dateApplied: e.target.value }))}
                     className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:border-emerald-500 dark:focus:border-emerald-500 rounded-xl outline-none transition-all text-slate-800 dark:text-slate-200 text-sm"
@@ -204,6 +241,23 @@ const JobModal: React.FC<Props> = ({ isOpen, onClose, onSave, editingJob, isSavi
                   />
                 </div>
              </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em]">Recruiting Service</label>
+            <input
+              type="text"
+              list="recruiting-services-datalist"
+              value={formData.recruitingService ?? ''}
+              onChange={e => setFormData(p => ({ ...p, recruitingService: e.target.value }))}
+              placeholder="Select or type a service…"
+              className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:border-emerald-500 dark:focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 dark:focus:ring-emerald-900/20 rounded-xl outline-none transition-all text-slate-800 dark:text-slate-200 text-sm"
+            />
+            <datalist id="recruiting-services-datalist">
+              {resolvedServices.map(svc => (
+                <option key={svc} value={svc} />
+              ))}
+            </datalist>
           </div>
 
           <div className="space-y-2">
@@ -371,6 +425,42 @@ const JobModal: React.FC<Props> = ({ isOpen, onClose, onSave, editingJob, isSavi
                 <p className="text-xs text-slate-500 dark:text-slate-400">
                   Reminder sent: {new Date(editingJob.interviewReminderSentAt).toLocaleDateString()}
                 </p>
+              )}
+
+              {(formData.interviewDate || formData.interviewOutcome) && (
+                <div className="space-y-3 pt-1">
+                  <div className="space-y-2">
+                    <span className="text-xs text-slate-500 dark:text-slate-400">Outcome:</span>
+                    <div className="flex gap-2 flex-wrap">
+                      {[
+                        { value: InterviewOutcome.PENDING, label: 'Pending', icon: <MinusCircle size={14} />, active: 'bg-slate-600 text-white', inactive: 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700' },
+                        { value: InterviewOutcome.PASSED, label: 'Passed', icon: <CheckCircle2 size={14} />, active: 'bg-emerald-600 text-white', inactive: 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700' },
+                        { value: InterviewOutcome.FAILED, label: 'Failed', icon: <XCircle size={14} />, active: 'bg-rose-600 text-white', inactive: 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700' },
+                        { value: InterviewOutcome.DECLINED, label: 'Declined', icon: <MinusCircle size={14} />, active: 'bg-amber-600 text-white', inactive: 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700' },
+                      ].map(opt => (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => setFormData(p => ({ ...p, interviewOutcome: p.interviewOutcome === opt.value ? undefined : opt.value }))}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${formData.interviewOutcome === opt.value ? opt.active : opt.inactive}`}
+                        >
+                          {opt.icon}{opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <span className="text-xs text-slate-500 dark:text-slate-400">Interview Notes:</span>
+                    <textarea
+                      rows={3}
+                      value={formData.interviewNotes || ''}
+                      onChange={e => setFormData(p => ({ ...p, interviewNotes: e.target.value }))}
+                      placeholder="Questions asked, topics covered, things to follow up on..."
+                      className="w-full px-3 py-2.5 bg-white dark:bg-slate-800 border border-blue-200 dark:border-blue-800 focus:border-blue-500 dark:focus:border-blue-500 rounded-xl outline-none transition-all resize-none text-slate-800 dark:text-slate-200 text-sm leading-relaxed"
+                    />
+                  </div>
+                </div>
               )}
             </div>
           </div>

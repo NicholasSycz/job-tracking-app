@@ -351,19 +351,20 @@ router.get(
       return;
     }
 
-    let total = 0;
-    for (const p of participations) {
-      total += await prisma.message.count({
-        where: {
-          conversationId: p.conversationId,
-          senderId: { not: userId },
-          deletedAt: null,
-          ...(p.lastReadAt ? { createdAt: { gt: p.lastReadAt } } : {}),
-        },
-      });
-    }
+    // Single query: count all unread messages across all conversations at once
+    const result = await prisma.$queryRaw<[{ count: bigint }]>`
+      SELECT COUNT(*) AS count
+      FROM "Message" m
+      INNER JOIN "ConversationParticipant" cp
+        ON cp."conversationId" = m."conversationId" AND cp."userId" = ${userId}
+      INNER JOIN "Conversation" c
+        ON c."id" = m."conversationId" AND c."tenantId" = ${tenantId}
+      WHERE m."senderId" != ${userId}
+        AND m."deletedAt" IS NULL
+        AND (cp."lastReadAt" IS NULL OR m."createdAt" > cp."lastReadAt")
+    `;
 
-    res.json({ count: total });
+    res.json({ count: Number(result[0].count) });
   })
 );
 
