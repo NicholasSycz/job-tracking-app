@@ -65,7 +65,28 @@ export interface MonthlyGoal {
   updatedAt: string;
 }
 
-export type ViewType = 'dashboard' | 'applications' | 'analytics' | 'messages' | 'settings';
+export type ViewType = 'dashboard' | 'applications' | 'analytics' | 'calendar' | 'messages' | 'settings';
+
+export enum EventType {
+  INTERVIEW = 'INTERVIEW',
+  RECRUITER_CALL = 'RECRUITER_CALL',
+  NETWORKING = 'NETWORKING',
+  OTHER = 'OTHER',
+}
+
+export interface CalendarEvent {
+  id: string;
+  tenantId: string;
+  createdByUserId: string;
+  title: string;
+  description?: string;
+  startAt: string;
+  endAt?: string;
+  type: EventType;
+  jobId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
 
 export interface UserSettings {
   applicationGoal: number | null;

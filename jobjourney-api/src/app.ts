@@ -7,6 +7,7 @@ import applicationRoutes from "./routes/applications";
 import settingsRoutes from "./routes/settings";
 import messagesRoutes from "./routes/messages";
 import membersRoutes from "./routes/members";
+import eventsRoutes from "./routes/events";
 import { errorHandler } from "./middleware/errorHandler";
 import { CORS_ORIGINS } from "./config";
 
@@ -29,6 +30,7 @@ app.use("/api", applicationRoutes);
 app.use("/api", messagesRoutes);
 app.use("/api", membersRoutes);
 app.use("/api/settings", settingsRoutes);
+app.use("/api", eventsRoutes);
 
 // Global error handler
 app.use(errorHandler);
