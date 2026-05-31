@@ -11,9 +11,14 @@ export function exportToCSV(applications: JobApplication[]): void {
     'Date Applied',
     'Location',
     'Salary',
+    'Source',
+    'Recruiting Service',
     'Description',
     'Link',
     'Notes',
+    'Interview Date',
+    'Interview Outcome',
+    'Interview Notes',
   ];
 
   const rows = applications.map((app) => [
@@ -23,9 +28,14 @@ export function exportToCSV(applications: JobApplication[]): void {
     app.dateApplied,
     escapeCSVField(app.location || ''),
     escapeCSVField(app.salary || ''),
+    escapeCSVField(app.source || ''),
+    escapeCSVField(app.recruitingService || ''),
     escapeCSVField(app.description || ''),
     escapeCSVField(app.link || ''),
     escapeCSVField(app.notes || ''),
+    app.interviewDate ? new Date(app.interviewDate).toISOString() : '',
+    app.interviewOutcome || '',
+    escapeCSVField(app.interviewNotes || ''),
   ]);
 
   const csvContent = [
@@ -47,9 +57,14 @@ export function exportToJSON(applications: JobApplication[]): void {
     dateApplied: app.dateApplied,
     location: app.location || null,
     salary: app.salary || null,
+    source: app.source || null,
+    recruitingService: app.recruitingService || null,
     description: app.description || null,
     link: app.link || null,
     notes: app.notes || null,
+    interviewDate: app.interviewDate || null,
+    interviewOutcome: app.interviewOutcome || null,
+    interviewNotes: app.interviewNotes || null,
   }));
 
   const jsonContent = JSON.stringify(data, null, 2);
