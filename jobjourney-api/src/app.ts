@@ -5,6 +5,7 @@ import cors from "cors";
 import authRoutes from "./routes/auth";
 import applicationRoutes from "./routes/applications";
 import settingsRoutes from "./routes/settings";
+import goalsRoutes from "./routes/goals";
 import messagesRoutes from "./routes/messages";
 import membersRoutes from "./routes/members";
 import eventsRoutes from "./routes/events";
@@ -30,6 +31,7 @@ app.use("/api", applicationRoutes);
 app.use("/api", messagesRoutes);
 app.use("/api", membersRoutes);
 app.use("/api/settings", settingsRoutes);
+app.use("/api/goals", goalsRoutes);
 app.use("/api", eventsRoutes);
 
 // Global error handler
