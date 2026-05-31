@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { X, Upload, FileJson, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
-import { JobApplication, ApplicationStatus } from '../types';
+import { JobApplication, ApplicationStatus, InterviewOutcome } from '../types';
 
 interface Props {
   isOpen: boolean;
@@ -82,7 +82,11 @@ const BulkImportModal: React.FC<Props> = ({ isOpen, onClose, onImport }) => {
             salary: app.salary as string,
             link: app.link as string,
             notes: app.notes as string,
+            source: app.source as JobApplication['source'],
+            recruitingService: app.recruitingService as string,
             interviewDate: app.interviewDate as string,
+            interviewOutcome: app.interviewOutcome as InterviewOutcome,
+            interviewNotes: app.interviewNotes as string,
           });
         }
       });
@@ -191,14 +195,19 @@ const BulkImportModal: React.FC<Props> = ({ isOpen, onClose, onImport }) => {
     "dateApplied": "2024-01-15",
     "location": "Remote",
     "salary": "$120k - $150k",
+    "source": "linkedin",
+    "recruitingService": "Hays",
     "link": "https://...",
     "notes": "Referred by John",
-    "interviewDate": "2024-01-20T10:00:00"
+    "interviewDate": "2024-01-20T10:00:00",
+    "interviewOutcome": "PASSED",
+    "interviewNotes": "Asked about system design"
   },
   ...
 ]
 
-Valid statuses: INTERESTED, APPLIED, INTERVIEWING, OFFER, REJECTED, GHOSTED`}
+Valid statuses: INTERESTED, APPLIED, INTERVIEWING, OFFER, REJECTED, GHOSTED
+Valid interviewOutcome values: PENDING, PASSED, FAILED, DECLINED`}
                 </pre>
               </details>
             </div>
