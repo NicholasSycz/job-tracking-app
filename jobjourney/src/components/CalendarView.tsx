@@ -216,10 +216,10 @@ const CalendarView: React.FC<Props> = ({ applications, calendarEvents, onEditJob
             </button>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={prevMonth} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl text-slate-500 transition-colors">
+            <button onClick={prevMonth} aria-label="Previous month" className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl text-slate-500 transition-colors">
               <ChevronLeft size={20} />
             </button>
-            <button onClick={nextMonth} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl text-slate-500 transition-colors">
+            <button onClick={nextMonth} aria-label="Next month" className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl text-slate-500 transition-colors">
               <ChevronRight size={20} />
             </button>
             <button

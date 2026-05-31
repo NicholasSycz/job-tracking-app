@@ -234,6 +234,7 @@ const EventModal: React.FC<Props> = ({ isOpen, onClose, onSave, onDelete, editin
               className="p-3 rounded-2xl border border-rose-200 dark:border-rose-900 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-colors disabled:opacity-50"
             >
               {isDeleting ? <Loader2 size={20} className="animate-spin" /> : <Trash2 size={20} />}
+              <span className="sr-only">Delete event</span>
             </button>
           )}
           <button

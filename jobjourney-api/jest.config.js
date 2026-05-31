@@ -1,3 +1,6 @@
+// Load test environment variables before any test code runs
+require('dotenv').config({ path: '.env.test', override: true });
+
 /** @type {import('ts-jest').JestConfigWithTsJest} */
 module.exports = {
   preset: 'ts-jest',
