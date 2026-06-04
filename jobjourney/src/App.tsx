@@ -125,20 +125,27 @@ const App: React.FC = () => {
       const applicationsData = await apiService.fetchApplications();
       setApplications(applicationsData);
 
-      // Load goals, settings, and calendar events separately so a failure doesn't block applications
-      try {
-        const [goalData, historyData, settingsData, eventsData] = await Promise.all([
-          apiService.fetchCurrentGoal(),
-          apiService.fetchGoalHistory(),
-          apiService.fetchSettings(),
-          apiService.fetchEvents(),
-        ]);
-        setCurrentGoal(goalData);
-        setGoalHistory(historyData);
-        setUserSettings(settingsData);
-        setCalendarEvents(eventsData);
-      } catch (err) {
-        console.error("Failed to load goals/settings/events:", err);
+      // Load goals, settings, and calendar events independently so one failing
+      // request doesn't blank out the others (e.g. a failed events fetch must not
+      // wipe userSettings and make custom job sources revert to defaults).
+      const [goalRes, historyRes, settingsRes, eventsRes] = await Promise.allSettled([
+        apiService.fetchCurrentGoal(),
+        apiService.fetchGoalHistory(),
+        apiService.fetchSettings(),
+        apiService.fetchEvents(),
+      ]);
+
+      if (goalRes.status === "fulfilled") setCurrentGoal(goalRes.value);
+      if (historyRes.status === "fulfilled") setGoalHistory(historyRes.value);
+      if (settingsRes.status === "fulfilled") setUserSettings(settingsRes.value);
+      if (eventsRes.status === "fulfilled") setCalendarEvents(eventsRes.value);
+
+      const failed = [goalRes, historyRes, settingsRes, eventsRes].filter(
+        (r): r is PromiseRejectedResult => r.status === "rejected"
+      );
+      if (failed.length) {
+        failed.forEach(r => console.error("Failed to load goals/settings/events:", r.reason));
+        showError("Partial load", "Some of your data couldn't be loaded. Please refresh.");
       }
     } catch (err) {
       console.error("Backend connection failed.", err);
