@@ -114,8 +114,9 @@ test.describe('Applications', () => {
       await expect(page.getByText('Interview Co', { exact: true })).toBeVisible();
     });
 
-    test('should show outcome buttons after setting an interview date', async ({ page }) => {
+    test('should show outcome buttons after adding an interview round', async ({ page }) => {
       await page.getByText('Interview Co', { exact: true }).click();
+      await page.getByRole('button', { name: /add round/i }).click();
       await page.locator('input[type="datetime-local"]').fill('2026-07-15T10:00');
 
       await expect(page.getByRole('button', { name: 'Passed' })).toBeVisible();
@@ -123,15 +124,16 @@ test.describe('Applications', () => {
       await expect(page.getByRole('button', { name: 'Declined' })).toBeVisible();
     });
 
-    test('should save interview outcome and notes', async ({ page }) => {
+    test('should save interview round outcome and notes', async ({ page }) => {
       await page.getByText('Interview Co', { exact: true }).click();
+      await page.getByRole('button', { name: /add round/i }).click();
       await page.locator('input[type="datetime-local"]').fill('2026-07-15T10:00');
       await page.getByRole('button', { name: 'Passed' }).click();
       await page.getByPlaceholder(/questions asked|agenda|topics/i).fill('Asked about system design');
-      await page.getByRole('button', { name: /save/i }).click();
+      await page.getByRole('button', { name: /save details/i }).click();
       await expect(page.getByText('Application Updated')).toBeVisible({ timeout: 5000 });
 
-      // Reopen and verify outcome persisted
+      // Reopen and verify the round persisted
       await page.getByText('Interview Co', { exact: true }).click();
       await expect(page.getByRole('button', { name: 'Passed' })).toHaveClass(/bg-emerald/);
       await expect(page.getByPlaceholder(/questions asked|agenda|topics/i)).toHaveValue('Asked about system design');

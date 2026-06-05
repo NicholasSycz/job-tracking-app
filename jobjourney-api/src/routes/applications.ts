@@ -1,5 +1,6 @@
 import { Router } from "express";
-import { TenantRole, InterviewOutcome } from "@prisma/client";
+import { randomUUID } from "node:crypto";
+import { Prisma, TenantRole, InterviewOutcome } from "@prisma/client";
 import { prisma } from "../db";
 import { requireAuth } from "../middleware/auth";
 import { requireTenantMember } from "../middleware/tenantAuth";
@@ -17,6 +18,81 @@ router.use(requireAuth);
 
 function canMutateJob(role: TenantRole | undefined, userId: string, job: { createdByUserId: string }): boolean {
   return role === TenantRole.owner || job.createdByUserId === userId;
+}
+
+// --- Interview rounds (stored as a JSON array on the job) ---
+interface InterviewRoundData {
+  id: string;
+  type: string;
+  scheduledAt: string; // ISO datetime
+  outcome: InterviewOutcome | null;
+  notes: string;
+}
+
+const VALID_OUTCOMES = Object.values(InterviewOutcome) as string[];
+
+function cleanInterviewRounds(input: unknown): InterviewRoundData[] {
+  if (!Array.isArray(input)) return [];
+  const rounds: InterviewRoundData[] = [];
+  for (const r of input) {
+    if (!r || typeof r !== "object") continue;
+    const raw = r as Record<string, unknown>;
+    const scheduledAt = raw.scheduledAt;
+    if (typeof scheduledAt !== "string" || isNaN(new Date(scheduledAt).getTime())) continue;
+    rounds.push({
+      id: typeof raw.id === "string" && raw.id ? raw.id : randomUUID(),
+      type: typeof raw.type === "string" ? raw.type : "",
+      scheduledAt: new Date(scheduledAt).toISOString(),
+      outcome: typeof raw.outcome === "string" && VALID_OUTCOMES.includes(raw.outcome) ? (raw.outcome as InterviewOutcome) : null,
+      notes: typeof raw.notes === "string" ? raw.notes : "",
+    });
+  }
+  return rounds;
+}
+
+/**
+ * Resolve the interview rounds for a request body. Returns `undefined` when the
+ * request doesn't mention interviews at all (so updates can leave them untouched).
+ * Falls back to the legacy single-interview fields (synthesizing one round) for
+ * clients that still send `interviewDate` (e.g. bulk import / extension).
+ */
+function roundsFromRequest(body: {
+  interviews?: unknown;
+  interviewDate?: unknown;
+  interviewOutcome?: unknown;
+  interviewNotes?: unknown;
+}): InterviewRoundData[] | undefined {
+  if (body.interviews !== undefined) return cleanInterviewRounds(body.interviews);
+  if (body.interviewDate !== undefined) {
+    if (!body.interviewDate || typeof body.interviewDate !== "string") return [];
+    const d = new Date(body.interviewDate);
+    if (isNaN(d.getTime())) return [];
+    return [{
+      id: randomUUID(),
+      type: "",
+      scheduledAt: d.toISOString(),
+      outcome: typeof body.interviewOutcome === "string" && VALID_OUTCOMES.includes(body.interviewOutcome) ? (body.interviewOutcome as InterviewOutcome) : null,
+      notes: typeof body.interviewNotes === "string" ? body.interviewNotes : "",
+    }];
+  }
+  return undefined;
+}
+
+function earliestRoundDate(rounds: InterviewRoundData[]): Date | null {
+  if (rounds.length === 0) return null;
+  return rounds.reduce<Date>((min, r) => {
+    const t = new Date(r.scheduledAt);
+    return t.getTime() < min.getTime() ? t : min;
+  }, new Date(rounds[0].scheduledAt));
+}
+
+function latestRound(rounds: InterviewRoundData[]): InterviewRoundData | null {
+  if (rounds.length === 0) return null;
+  return rounds.reduce((a, b) => new Date(b.scheduledAt).getTime() >= new Date(a.scheduledAt).getTime() ? b : a);
+}
+
+function roundsToJson(rounds: InterviewRoundData[]): Prisma.InputJsonValue {
+  return rounds as unknown as Prisma.InputJsonValue;
 }
 
 // Transform job to frontend format
@@ -42,6 +118,7 @@ function toJobResponse(job: {
   interviewReminderSentAt?: Date | null;
   interviewOutcome?: InterviewOutcome | null;
   interviewNotes?: string | null;
+  interviews?: unknown;
   recruitingService?: string | null;
 }) {
   return {
@@ -66,6 +143,7 @@ function toJobResponse(job: {
     interviewReminderSentAt: job.interviewReminderSentAt?.toISOString() ?? undefined,
     interviewOutcome: job.interviewOutcome ?? undefined,
     interviewNotes: job.interviewNotes ?? undefined,
+    interviews: (job.interviews as InterviewRoundData[] | null | undefined) ?? [],
     recruitingService: job.recruitingService ?? undefined,
   };
 }
@@ -88,7 +166,10 @@ router.post("/tenants/:tenantId/applications", requireTenantMember, validate(sch
   const tenantId = getParam(req.params.tenantId);
   const userId = req.userId;
 
-  const { company, role, status, dateApplied, description, location, salary, link, notes, source, externalJobId, followUpDate, reminderEnabled, interviewDate, interviewReminderEnabled, interviewOutcome, interviewNotes, recruitingService } = req.body;
+  const { company, role, status, dateApplied, description, location, salary, link, notes, source, externalJobId, followUpDate, reminderEnabled, interviewReminderEnabled, recruitingService } = req.body;
+
+  const rounds = roundsFromRequest(req.body) ?? [];
+  const latest = latestRound(rounds);
 
   const job = await prisma.job.create({
     data: {
@@ -107,10 +188,11 @@ router.post("/tenants/:tenantId/applications", requireTenantMember, validate(sch
       externalJobId: externalJobId || null,
       followUpDate: followUpDate ? new Date(followUpDate) : null,
       reminderEnabled: reminderEnabled || false,
-      interviewDate: interviewDate ? new Date(interviewDate) : null,
+      interviews: roundsToJson(rounds),
+      interviewDate: earliestRoundDate(rounds),
       interviewReminderEnabled: interviewReminderEnabled || false,
-      interviewOutcome: interviewOutcome || null,
-      interviewNotes: interviewNotes || null,
+      interviewOutcome: latest?.outcome ?? null,
+      interviewNotes: latest?.notes || null,
       recruitingService: recruitingService || null,
     },
   });
@@ -186,6 +268,7 @@ router.post("/tenants/:tenantId/applications/bulk", requireTenantMember, asyncHa
     const jobs: Job[] = [];
 
     for (const app of applications) {
+      const rounds = roundsFromRequest(app) ?? [];
       const job = await tx.job.create({
         data: {
           tenantId,
@@ -203,7 +286,8 @@ router.post("/tenants/:tenantId/applications/bulk", requireTenantMember, asyncHa
           externalJobId: app.externalJobId || null,
           followUpDate: app.followUpDate ? new Date(app.followUpDate) : null,
           reminderEnabled: app.reminderEnabled || false,
-          interviewDate: app.interviewDate ? new Date(app.interviewDate) : null,
+          interviews: roundsToJson(rounds),
+          interviewDate: earliestRoundDate(rounds),
           interviewReminderEnabled: app.interviewReminderEnabled || false,
         },
       });
@@ -348,10 +432,15 @@ router.put("/tenants/:tenantId/applications/:id", requireTenantMember, validate(
     throw new ForbiddenError("You can only modify applications you created");
   }
 
-  const { company, role, status, dateApplied, description, location, salary, link, notes, source, externalJobId, followUpDate, reminderEnabled, interviewDate, interviewReminderEnabled, interviewOutcome, interviewNotes, recruitingService } = req.body;
+  const { company, role, status, dateApplied, description, location, salary, link, notes, source, externalJobId, followUpDate, reminderEnabled, interviewReminderEnabled, interviewOutcome, interviewNotes, recruitingService } = req.body;
 
   // Track status change for history
   const statusChanged = status && status !== existingJob.status;
+
+  // Resolve interview rounds. `undefined` means the request didn't touch interviews,
+  // so we leave the stored rounds + mirrored legacy fields as-is.
+  const requestedRounds = roundsFromRequest(req.body);
+  const reqLatest = requestedRounds ? latestRound(requestedRounds) : null;
 
   const job = await prisma.job.update({
     where: { id },
@@ -369,10 +458,11 @@ router.put("/tenants/:tenantId/applications/:id", requireTenantMember, validate(
       externalJobId: externalJobId !== undefined ? externalJobId || null : existingJob.externalJobId,
       followUpDate: followUpDate !== undefined ? (followUpDate ? new Date(followUpDate) : null) : existingJob.followUpDate,
       reminderEnabled: reminderEnabled !== undefined ? reminderEnabled : existingJob.reminderEnabled,
-      interviewDate: interviewDate !== undefined ? (interviewDate ? new Date(interviewDate) : null) : existingJob.interviewDate,
+      interviews: requestedRounds !== undefined ? roundsToJson(requestedRounds) : undefined,
+      interviewDate: requestedRounds !== undefined ? earliestRoundDate(requestedRounds) : existingJob.interviewDate,
       interviewReminderEnabled: interviewReminderEnabled !== undefined ? interviewReminderEnabled : existingJob.interviewReminderEnabled,
-      interviewOutcome: interviewOutcome !== undefined ? (interviewOutcome || null) : existingJob.interviewOutcome,
-      interviewNotes: interviewNotes !== undefined ? (interviewNotes || null) : existingJob.interviewNotes,
+      interviewOutcome: requestedRounds !== undefined ? (reqLatest?.outcome ?? null) : (interviewOutcome !== undefined ? (interviewOutcome || null) : existingJob.interviewOutcome),
+      interviewNotes: requestedRounds !== undefined ? (reqLatest?.notes || null) : (interviewNotes !== undefined ? (interviewNotes || null) : existingJob.interviewNotes),
       recruitingService: recruitingService !== undefined ? (recruitingService || null) : existingJob.recruitingService,
     },
   });

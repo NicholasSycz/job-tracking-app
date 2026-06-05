@@ -17,6 +17,14 @@ export enum InterviewOutcome {
 
 export type JobSource = 'other' | 'linkedin' | 'indeed' | 'ycombinator' | 'gittap' | 'gaijinpot' | 'weworkremotely' | 'extension';
 
+export interface InterviewRound {
+  id: string;                   // stable id (crypto.randomUUID())
+  type: string;                 // value from configurable interview types; '' = unspecified
+  scheduledAt: string;          // ISO datetime
+  outcome?: InterviewOutcome;
+  notes?: string;
+}
+
 export interface JobApplication {
   id: string;
   company: string;
@@ -39,6 +47,7 @@ export interface JobApplication {
   interviewReminderSentAt?: string;
   interviewOutcome?: InterviewOutcome;
   interviewNotes?: string;
+  interviews?: InterviewRound[];
   recruitingService?: string;
 }
 
@@ -92,6 +101,7 @@ export interface UserSettings {
   applicationGoal: number | null;
   jobSources: { value: string; label: string }[] | null;
   recruitingServices: string[] | null;
+  interviewTypes: { value: string; label: string }[] | null;
 }
 
 export interface TenantMember {

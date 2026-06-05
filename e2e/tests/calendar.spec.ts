@@ -161,8 +161,9 @@ test.describe('Calendar', () => {
       await page.getByRole('button', { name: 'New Opportunity' }).click();
       await page.getByPlaceholder('Acme Corp').fill('Calendar Corp');
       await page.getByPlaceholder('Senior Engineer').fill('Dev');
+      await page.getByRole('button', { name: /add round/i }).click();
       await page.locator('input[type="datetime-local"]').fill(interviewDate);
-      await page.getByRole('button', { name: /save/i }).click();
+      await page.getByRole('button', { name: /save details/i }).click();
       await expect(page.getByText('Application Added')).toBeVisible({ timeout: 5000 });
 
       // Navigate back to calendar — interview chip should appear

@@ -648,6 +648,7 @@ const App: React.FC = () => {
         isSaving={isSaving}
         jobSources={userSettings?.jobSources ?? null}
         recruitingServices={userSettings?.recruitingServices ?? null}
+        interviewTypes={userSettings?.interviewTypes ?? null}
       />
 
       <ConfirmModal

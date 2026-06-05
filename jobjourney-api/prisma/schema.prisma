@@ -16,6 +16,7 @@ model User {
   applicationGoal    Int   @default(25)
   jobSources         Json? // [{ value: string; label: string }]
   recruitingServices Json? // string[]
+  interviewTypes     Json? // [{ value: string; label: string }]
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   isActive        Boolean  @default(true)
@@ -121,8 +122,9 @@ model Job {
   interviewDate            DateTime?          // Date and time of scheduled interview
   interviewReminderEnabled Boolean            @default(false)
   interviewReminderSentAt  DateTime?          // When interview reminder was sent
-  interviewOutcome         InterviewOutcome?  // Result of the interview (null = no interview yet)
-  interviewNotes           String?            // Notes taken before, during, or after the interview
+  interviewOutcome         InterviewOutcome?  // Result of the latest interview round (mirror of interviews[])
+  interviewNotes           String?            // Notes from the latest interview round (mirror of interviews[])
+  interviews               Json?              // InterviewRound[]: [{ id, type, scheduledAt, outcome, notes }]
   recruitingService        String?            // Recruiting agency or service used (free text)
 
   // Extension/reminder fields

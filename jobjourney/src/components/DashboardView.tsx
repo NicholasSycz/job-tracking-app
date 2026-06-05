@@ -1,6 +1,7 @@
 
 import React from 'react';
 import { JobApplication, ApplicationStatus, MonthlyGoal } from '../types';
+import { hasInterview } from '../utils/interview';
 import { Briefcase, Clock, CheckCircle2, XCircle, ChevronRight } from 'lucide-react';
 
 interface Props {
@@ -22,7 +23,7 @@ const DashboardView: React.FC<Props> = ({ applications, onEdit, currentGoal }) =
   const stats = {
     total: applications.length,
     active: applications.filter(a => a.status === ApplicationStatus.APPLIED || a.status === ApplicationStatus.INTERVIEWING).length,
-    interviews: applications.filter(a => a.status === ApplicationStatus.INTERVIEWING).length,
+    interviews: applications.filter(hasInterview).length,
     offers: applications.filter(a => a.status === ApplicationStatus.OFFER).length,
   };
 
