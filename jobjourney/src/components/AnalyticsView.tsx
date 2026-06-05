@@ -14,6 +14,7 @@ import {
 } from 'recharts';
 import { JobApplication, ApplicationStatus, InterviewOutcome } from '../types';
 import { DEFAULT_JOB_SOURCES } from '../constants';
+import { hasInterview, earliestInterviewDate, latestOutcome } from '../utils/interview';
 import { useTheme } from '../contexts/ThemeContext';
 import { FileText, Calendar, TrendingUp, Target, Percent, Ghost, CheckCircle2, XCircle, Layers } from 'lucide-react';
 
@@ -93,7 +94,7 @@ const AnalyticsView: React.FC<Props> = ({ applications }) => {
       const src = app.source || 'other';
       if (!sources[src]) sources[src] = { apps: 0, interviews: 0, offers: 0 };
       sources[src].apps++;
-      if (app.status === ApplicationStatus.INTERVIEWING || app.status === ApplicationStatus.OFFER) sources[src].interviews++;
+      if (hasInterview(app)) sources[src].interviews++;
       if (app.status === ApplicationStatus.OFFER) sources[src].offers++;
     });
     return Object.entries(sources)
@@ -115,7 +116,7 @@ const AnalyticsView: React.FC<Props> = ({ applications }) => {
       if (!svc) return;
       if (!services[svc]) services[svc] = { apps: 0, interviews: 0, offers: 0 };
       services[svc].apps++;
-      if (app.status === ApplicationStatus.INTERVIEWING || app.status === ApplicationStatus.OFFER) services[svc].interviews++;
+      if (hasInterview(app)) services[svc].interviews++;
       if (app.status === ApplicationStatus.OFFER) services[svc].offers++;
     });
     return Object.entries(services)
@@ -149,7 +150,7 @@ const AnalyticsView: React.FC<Props> = ({ applications }) => {
     const relevantStatuses = [ApplicationStatus.INTERVIEWING, ApplicationStatus.REJECTED, ApplicationStatus.OFFER, ApplicationStatus.GHOSTED];
     const relevantApps = filtered.filter(a => relevantStatuses.includes(a.status));
     const responded = relevantApps.filter(a => a.status !== ApplicationStatus.GHOSTED);
-    const interviews = filtered.filter(a => a.status === ApplicationStatus.INTERVIEWING || a.status === ApplicationStatus.OFFER);
+    const interviews = filtered.filter(hasInterview);
     const offers = filtered.filter(a => a.status === ApplicationStatus.OFFER);
     const ghosted = filtered.filter(a => a.status === ApplicationStatus.GHOSTED);
 
@@ -158,21 +159,24 @@ const AnalyticsView: React.FC<Props> = ({ applications }) => {
     const offerRate = (offers.length / total) * 100;
     const ghostedRate = (ghosted.length / total) * 100;
 
-    const withInterview = filtered.filter(a => a.interviewDate);
+    // Days to the first interview round
+    const withInterview = filtered
+      .map(a => ({ applied: a.dateApplied, interview: earliestInterviewDate(a) }))
+      .filter((x): x is { applied: string; interview: string } => x.interview !== null);
     let avgDaysToInterview: number | null = null;
     if (withInterview.length > 0) {
-      const totalDays = withInterview.reduce((sum, a) => {
-        const applied = new Date(a.dateApplied).getTime();
-        const interview = new Date(a.interviewDate!).getTime();
+      const totalDays = withInterview.reduce((sum, x) => {
+        const applied = new Date(x.applied).getTime();
+        const interview = new Date(x.interview).getTime();
         return sum + Math.max(0, (interview - applied) / (1000 * 60 * 60 * 24));
       }, 0);
       avgDaysToInterview = Math.round(totalDays / withInterview.length);
     }
 
-    // Interview outcome rates
-    const withOutcome = filtered.filter(a => a.interviewOutcome && a.interviewOutcome !== InterviewOutcome.PENDING);
-    const passed = withOutcome.filter(a => a.interviewOutcome === InterviewOutcome.PASSED);
-    const failed = withOutcome.filter(a => a.interviewOutcome === InterviewOutcome.FAILED);
+    // Interview outcome rates (representative outcome = latest round's outcome)
+    const withOutcome = filtered.filter(a => { const o = latestOutcome(a); return o && o !== InterviewOutcome.PENDING; });
+    const passed = withOutcome.filter(a => latestOutcome(a) === InterviewOutcome.PASSED);
+    const failed = withOutcome.filter(a => latestOutcome(a) === InterviewOutcome.FAILED);
     const interviewPassRate = withOutcome.length > 0 ? (passed.length / withOutcome.length) * 100 : null;
     const interviewFailRate = withOutcome.length > 0 ? (failed.length / withOutcome.length) * 100 : null;
 
@@ -183,7 +187,7 @@ const AnalyticsView: React.FC<Props> = ({ applications }) => {
       if (!svc) return;
       if (!svcMap[svc]) svcMap[svc] = { apps: 0, interviews: 0, offers: 0 };
       svcMap[svc].apps++;
-      if (a.status === ApplicationStatus.INTERVIEWING || a.status === ApplicationStatus.OFFER) svcMap[svc].interviews++;
+      if (hasInterview(a)) svcMap[svc].interviews++;
       if (a.status === ApplicationStatus.OFFER) svcMap[svc].offers++;
     });
     const topRecruitingServices = Object.entries(svcMap)
@@ -208,11 +212,9 @@ const AnalyticsView: React.FC<Props> = ({ applications }) => {
   // Funnel data derived from all applications
   const funnelStats = useMemo(() => {
     const total = applications.length;
-    const interviewsLanded = applications.filter(a =>
-      [ApplicationStatus.INTERVIEWING, ApplicationStatus.OFFER].includes(a.status) || a.interviewOutcome != null
-    ).length;
-    const interviewsPassed = applications.filter(a => a.interviewOutcome === InterviewOutcome.PASSED).length;
-    const interviewsFailed = applications.filter(a => a.interviewOutcome === InterviewOutcome.FAILED).length;
+    const interviewsLanded = applications.filter(hasInterview).length;
+    const interviewsPassed = applications.filter(a => latestOutcome(a) === InterviewOutcome.PASSED).length;
+    const interviewsFailed = applications.filter(a => latestOutcome(a) === InterviewOutcome.FAILED).length;
     const jobOffers = applications.filter(a => a.status === ApplicationStatus.OFFER).length;
     return { total, interviewsLanded, interviewsPassed, interviewsFailed, jobOffers };
   }, [applications]);

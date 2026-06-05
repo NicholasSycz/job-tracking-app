@@ -15,7 +15,7 @@ router.get("/", asyncHandler(async (req: AuthenticatedRequest, res) => {
 
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { applicationGoal: true, jobSources: true, recruitingServices: true },
+    select: { applicationGoal: true, jobSources: true, recruitingServices: true, interviewTypes: true },
   });
 
   if (!user) {
@@ -26,16 +26,18 @@ router.get("/", asyncHandler(async (req: AuthenticatedRequest, res) => {
     applicationGoal: user.applicationGoal,
     jobSources: user.jobSources ?? null,
     recruitingServices: user.recruitingServices ?? null,
+    interviewTypes: user.interviewTypes ?? null,
   });
 }));
 
 // PUT /api/settings - Update user settings
 router.put("/", asyncHandler(async (req: AuthenticatedRequest, res) => {
   const userId = req.userId;
-  const { applicationGoal, jobSources, recruitingServices } = req.body as {
+  const { applicationGoal, jobSources, recruitingServices, interviewTypes } = req.body as {
     applicationGoal?: number;
     jobSources?: { value: string; label: string }[] | null;
     recruitingServices?: string[] | null;
+    interviewTypes?: { value: string; label: string }[] | null;
   };
 
   if (applicationGoal !== undefined) {
@@ -56,20 +58,29 @@ router.put("/", asyncHandler(async (req: AuthenticatedRequest, res) => {
     if (recruitingServices.some(s => typeof s !== 'string')) throw new ValidationError("recruitingServices must be an array of strings");
   }
 
+  if (interviewTypes !== undefined && interviewTypes !== null) {
+    if (!Array.isArray(interviewTypes)) throw new ValidationError("interviewTypes must be an array");
+    for (const t of interviewTypes) {
+      if (!t.value || !t.label) throw new ValidationError("Each interview type must have a value and label");
+    }
+  }
+
   const user = await prisma.user.update({
     where: { id: userId },
     data: {
       ...(applicationGoal !== undefined && { applicationGoal }),
       ...(jobSources !== undefined && { jobSources: jobSources ?? [] }),
       ...(recruitingServices !== undefined && { recruitingServices: recruitingServices ?? [] }),
+      ...(interviewTypes !== undefined && { interviewTypes: interviewTypes ?? [] }),
     },
-    select: { applicationGoal: true, jobSources: true, recruitingServices: true },
+    select: { applicationGoal: true, jobSources: true, recruitingServices: true, interviewTypes: true },
   });
 
   res.json({
     applicationGoal: user.applicationGoal,
     jobSources: user.jobSources ?? null,
     recruitingServices: user.recruitingServices ?? null,
+    interviewTypes: user.interviewTypes ?? null,
   });
 }));
 

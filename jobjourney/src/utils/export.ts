@@ -1,4 +1,20 @@
 import { JobApplication } from '../types';
+import { getInterviews } from './interview';
+import { DEFAULT_INTERVIEW_TYPES } from '../constants';
+
+/** Human-readable one-cell summary of an application's interview rounds. */
+function summarizeInterviews(app: JobApplication): string {
+  return getInterviews(app)
+    .map((r) => {
+      const typeLabel = r.type
+        ? (DEFAULT_INTERVIEW_TYPES.find((t) => t.value === r.type)?.label ?? r.type)
+        : 'Interview';
+      const date = new Date(r.scheduledAt).toISOString().split('T')[0];
+      const outcome = r.outcome ? ` (${r.outcome})` : '';
+      return `${typeLabel} ${date}${outcome}`;
+    })
+    .join('; ');
+}
 
 /**
  * Export applications to CSV format
@@ -16,9 +32,7 @@ export function exportToCSV(applications: JobApplication[]): void {
     'Description',
     'Link',
     'Notes',
-    'Interview Date',
-    'Interview Outcome',
-    'Interview Notes',
+    'Interviews',
   ];
 
   const rows = applications.map((app) => [
@@ -33,9 +47,7 @@ export function exportToCSV(applications: JobApplication[]): void {
     escapeCSVField(app.description || ''),
     escapeCSVField(app.link || ''),
     escapeCSVField(app.notes || ''),
-    app.interviewDate ? new Date(app.interviewDate).toISOString() : '',
-    app.interviewOutcome || '',
-    escapeCSVField(app.interviewNotes || ''),
+    escapeCSVField(summarizeInterviews(app)),
   ]);
 
   const csvContent = [
@@ -62,9 +74,7 @@ export function exportToJSON(applications: JobApplication[]): void {
     description: app.description || null,
     link: app.link || null,
     notes: app.notes || null,
-    interviewDate: app.interviewDate || null,
-    interviewOutcome: app.interviewOutcome || null,
-    interviewNotes: app.interviewNotes || null,
+    interviews: getInterviews(app),
   }));
 
   const jsonContent = JSON.stringify(data, null, 2);

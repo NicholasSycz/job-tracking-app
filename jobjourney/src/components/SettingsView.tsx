@@ -5,7 +5,7 @@ import { useToast } from '../contexts/ToastContext';
 import { API_BASE_URL } from '../config';
 import { apiService } from '../services/apiService';
 import MembersSettings from './MembersSettings';
-import { DEFAULT_JOB_SOURCES, DEFAULT_RECRUITING_SERVICES } from '../constants';
+import { DEFAULT_JOB_SOURCES, DEFAULT_RECRUITING_SERVICES, DEFAULT_INTERVIEW_TYPES } from '../constants';
 
 function getAvatarUrl(user: AuthUser): string {
   if (user.avatarUrl) {
@@ -52,10 +52,18 @@ const SettingsView: React.FC<Props> = ({ user, onUpdateUser, onLogout, currentGo
   const [newService, setNewService] = useState('');
   const [isSavingServices, setIsSavingServices] = useState(false);
 
+  // Interview Types state
+  const [interviewTypes, setInterviewTypes] = useState<{ value: string; label: string }[]>(
+    userSettings?.interviewTypes ?? DEFAULT_INTERVIEW_TYPES
+  );
+  const [newTypeLabel, setNewTypeLabel] = useState('');
+  const [isSavingTypes, setIsSavingTypes] = useState(false);
+
   useEffect(() => {
     if (userSettings) {
       setJobSources(userSettings.jobSources ?? DEFAULT_JOB_SOURCES);
       setRecruitingServices(userSettings.recruitingServices ?? DEFAULT_RECRUITING_SERVICES);
+      setInterviewTypes(userSettings.interviewTypes ?? DEFAULT_INTERVIEW_TYPES);
     }
   }, [userSettings]);
 
@@ -109,6 +117,33 @@ const SettingsView: React.FC<Props> = ({ user, onUpdateUser, onLogout, currentGo
       setIsSavingServices(false);
     }
   };
+
+  const handleAddType = () => {
+    const label = newTypeLabel.trim();
+    if (!label) return;
+    const value = slugify(label);
+    if (interviewTypes.find(t => t.value === value)) {
+      showError('Duplicate', 'An interview type with that value already exists.');
+      return;
+    }
+    setInterviewTypes(prev => [...prev, { value, label }]);
+    setNewTypeLabel('');
+  };
+
+  const handleSaveTypes = async () => {
+    setIsSavingTypes(true);
+    try {
+      const updated = await apiService.updateSettings({ interviewTypes });
+      onUpdateSettings({ ...userSettings!, ...updated });
+      showSuccess('Saved', 'Interview types updated.');
+    } catch {
+      showError('Save Failed', 'Unable to save interview types.');
+    } finally {
+      setIsSavingTypes(false);
+    }
+  };
+
+  const handleResetTypes = () => setInterviewTypes(DEFAULT_INTERVIEW_TYPES);
 
   const [isPasswordFormOpen, setIsPasswordFormOpen] = useState(false);
   const [currentPassword, setCurrentPassword] = useState('');
@@ -568,6 +603,72 @@ const SettingsView: React.FC<Props> = ({ user, onUpdateUser, onLogout, currentGo
         >
           <Save size={15} />
           {isSavingServices ? 'Saving…' : 'Save Services'}
+        </button>
+      </section>
+
+      {/* Interview Types Section */}
+      <section className="bg-white dark:bg-slate-950 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm transition-colors">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-xl flex items-center justify-center">
+            <Layers className="text-blue-600 dark:text-blue-400" size={20} />
+          </div>
+          <div className="flex-1">
+            <h2 className="text-lg font-bold text-slate-800 dark:text-white">Interview Types</h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400">Customize the interview round types available in the application form</p>
+          </div>
+          <button
+            onClick={handleResetTypes}
+            className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+          >
+            <RotateCcw size={13} /> Reset to defaults
+          </button>
+        </div>
+
+        <div className="space-y-2 mb-4">
+          {interviewTypes.length === 0 && (
+            <p className="text-sm text-slate-400 dark:text-slate-600 italic">No interview types yet. Add some below.</p>
+          )}
+          {interviewTypes.map(t => (
+            <div key={t.value} className="flex items-center justify-between px-3 py-2 bg-slate-50 dark:bg-slate-900 rounded-xl">
+              <div>
+                <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">{t.label}</span>
+                <span className="ml-2 text-xs text-slate-400 dark:text-slate-600 font-mono">{t.value}</span>
+              </div>
+              <button
+                onClick={() => setInterviewTypes(prev => prev.filter(x => x.value !== t.value))}
+                className="p-1 text-slate-400 hover:text-rose-500 transition-colors rounded-lg"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          ))}
+        </div>
+
+        <div className="flex gap-2 mb-4">
+          <input
+            type="text"
+            placeholder="e.g. Technical, Culture Fit, System Design…"
+            value={newTypeLabel}
+            onChange={e => setNewTypeLabel(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleAddType()}
+            className="flex-1 px-3 py-2 text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl outline-none focus:border-blue-400 text-slate-800 dark:text-slate-200"
+          />
+          <button
+            onClick={handleAddType}
+            disabled={!newTypeLabel.trim()}
+            className="px-3 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white rounded-xl transition-colors"
+          >
+            <Plus size={16} />
+          </button>
+        </div>
+
+        <button
+          onClick={handleSaveTypes}
+          disabled={isSavingTypes}
+          className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-xl transition-colors disabled:opacity-50"
+        >
+          <Save size={15} />
+          {isSavingTypes ? 'Saving…' : 'Save Types'}
         </button>
       </section>
 

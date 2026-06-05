@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, Link2, MapPin, DollarSign, Calendar, Briefcase, Loader2, Bell, Clock, Video, CheckCircle2, XCircle, MinusCircle } from 'lucide-react';
-import { JobApplication, JobApplicationCreateInput, ApplicationStatus, InterviewOutcome, JobSource } from '../types';
-import { DEFAULT_JOB_SOURCES, DEFAULT_RECRUITING_SERVICES } from '../constants';
+import { X, Save, Link2, MapPin, DollarSign, Calendar, Briefcase, Loader2, Bell, Clock, Video, CheckCircle2, XCircle, MinusCircle, Plus, Trash2 } from 'lucide-react';
+import { JobApplication, JobApplicationCreateInput, ApplicationStatus, InterviewOutcome, InterviewRound, JobSource } from '../types';
+import { DEFAULT_JOB_SOURCES, DEFAULT_RECRUITING_SERVICES, DEFAULT_INTERVIEW_TYPES } from '../constants';
+import { getInterviews } from '../utils/interview';
 import StatusHistory from './StatusHistory';
 
 interface Props {
@@ -12,6 +13,7 @@ interface Props {
   isSaving?: boolean;
   jobSources?: { value: string; label: string }[] | null;
   recruitingServices?: string[] | null;
+  interviewTypes?: { value: string; label: string }[] | null;
 }
 
 // Helper to convert ISO string to datetime-local input format (YYYY-MM-DDTHH:mm)
@@ -27,9 +29,17 @@ const toDatetimeLocalValue = (isoString: string | undefined): string => {
   return `${year}-${month}-${day}T${hours}:${minutes}`;
 };
 
-const JobModal: React.FC<Props> = ({ isOpen, onClose, onSave, editingJob, isSaving = false, jobSources, recruitingServices }) => {
+const OUTCOME_OPTIONS: { value: InterviewOutcome; label: string; icon: React.ReactNode; active: string; inactive: string }[] = [
+  { value: InterviewOutcome.PENDING,  label: 'Pending',  icon: <MinusCircle size={14} />,  active: 'bg-slate-600 text-white',   inactive: 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700' },
+  { value: InterviewOutcome.PASSED,   label: 'Passed',   icon: <CheckCircle2 size={14} />, active: 'bg-emerald-600 text-white', inactive: 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700' },
+  { value: InterviewOutcome.FAILED,   label: 'Failed',   icon: <XCircle size={14} />,      active: 'bg-rose-600 text-white',    inactive: 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700' },
+  { value: InterviewOutcome.DECLINED, label: 'Declined', icon: <MinusCircle size={14} />,  active: 'bg-amber-600 text-white',   inactive: 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700' },
+];
+
+const JobModal: React.FC<Props> = ({ isOpen, onClose, onSave, editingJob, isSaving = false, jobSources, recruitingServices, interviewTypes }) => {
   const resolvedSources = jobSources ?? DEFAULT_JOB_SOURCES;
   const resolvedServices = recruitingServices ?? DEFAULT_RECRUITING_SERVICES;
+  const resolvedInterviewTypes = interviewTypes ?? DEFAULT_INTERVIEW_TYPES;
   const [formData, setFormData] = useState<Partial<JobApplication>>({
     company: '',
     role: '',
@@ -42,10 +52,8 @@ const JobModal: React.FC<Props> = ({ isOpen, onClose, onSave, editingJob, isSavi
     notes: '',
     followUpDate: '',
     reminderEnabled: false,
-    interviewDate: '',
     interviewReminderEnabled: false,
-    interviewOutcome: undefined,
-    interviewNotes: '',
+    interviews: [],
     recruitingService: '',
   });
 
@@ -66,11 +74,10 @@ const JobModal: React.FC<Props> = ({ isOpen, onClose, onSave, editingJob, isSavi
         followUpDate: editingJob.followUpDate ?? '',
         reminderEnabled: editingJob.reminderEnabled ?? false,
         reminderSentAt: editingJob.reminderSentAt,
-        interviewDate: editingJob.interviewDate ?? '',
         interviewReminderEnabled: editingJob.interviewReminderEnabled ?? false,
         interviewReminderSentAt: editingJob.interviewReminderSentAt,
-        interviewOutcome: editingJob.interviewOutcome,
-        interviewNotes: editingJob.interviewNotes ?? '',
+        // Seed rounds from the stored array, falling back to the legacy single-interview fields.
+        interviews: getInterviews(editingJob).map(r => ({ ...r })),
         recruitingService: editingJob.recruitingService ?? '',
       });
     } else {
@@ -86,32 +93,46 @@ const JobModal: React.FC<Props> = ({ isOpen, onClose, onSave, editingJob, isSavi
         notes: '',
         followUpDate: '',
         reminderEnabled: false,
-        interviewDate: '',
         interviewReminderEnabled: false,
-        interviewOutcome: undefined,
-        interviewNotes: '',
+        interviews: [],
         recruitingService: '',
       });
     }
   }, [editingJob, isOpen]);
+
+  const interviews = formData.interviews ?? [];
+  const updateRound = (id: string, patch: Partial<InterviewRound>) =>
+    setFormData(p => ({ ...p, interviews: (p.interviews ?? []).map(r => r.id === id ? { ...r, ...patch } : r) }));
+  const removeRound = (id: string) =>
+    setFormData(p => ({ ...p, interviews: (p.interviews ?? []).filter(r => r.id !== id) }));
+  const addRound = () =>
+    setFormData(p => ({ ...p, interviews: [...(p.interviews ?? []), { id: crypto.randomUUID(), type: '', scheduledAt: '', outcome: undefined, notes: '' }] }));
+  const hasScheduledRound = interviews.some(r => r.scheduledAt);
 
   if (!isOpen) return null;
 
   const handleSave = async () => {
     if (!formData.company || !formData.role) return;
 
-    // Convert interviewDate to ISO if it's a local datetime string
-    const interviewDateISO = formData.interviewDate
-      ? new Date(formData.interviewDate).toISOString()
-      : undefined;
+    // Drop empty rounds (no date), normalize dates to ISO, ensure each has an id.
+    const cleanInterviews: InterviewRound[] = (formData.interviews ?? [])
+      .filter(r => r.scheduledAt)
+      .map(r => ({
+        id: r.id || crypto.randomUUID(),
+        type: r.type ?? '',
+        scheduledAt: new Date(r.scheduledAt).toISOString(),
+        outcome: r.outcome,
+        notes: r.notes ?? '',
+      }));
 
     try {
       if (editingJob) {
-        // Editing existing job - include the id
+        // Editing existing job - include the id. The backend derives the legacy
+        // single-interview fields from `interviews`, so we don't send them.
         await onSave({
           ...formData,
           id: editingJob.id,
-          interviewDate: interviewDateISO,
+          interviews: cleanInterviews,
         } as JobApplication);
       } else {
         // Creating new job - let server generate id
@@ -127,10 +148,8 @@ const JobModal: React.FC<Props> = ({ isOpen, onClose, onSave, editingJob, isSavi
           notes: formData.notes,
           followUpDate: formData.followUpDate || undefined,
           reminderEnabled: formData.reminderEnabled,
-          interviewDate: interviewDateISO,
           interviewReminderEnabled: formData.interviewReminderEnabled,
-          interviewOutcome: formData.interviewOutcome,
-          interviewNotes: formData.interviewNotes,
+          interviews: cleanInterviews,
           recruitingService: formData.recruitingService,
         });
       }
@@ -392,98 +411,110 @@ const JobModal: React.FC<Props> = ({ isOpen, onClose, onSave, editingJob, isSavi
             )}
           </div>
 
-          {/* Interview Scheduling */}
+          {/* Interview Rounds */}
           <div className="space-y-4 p-4 bg-blue-50/50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800/50 rounded-2xl">
-            <div className="flex items-center gap-3">
-              <Video className="text-blue-600 dark:text-blue-500" size={18} />
-              <span className="text-[10px] font-bold text-blue-700 dark:text-blue-500 uppercase tracking-[0.2em]">Interview Scheduled</span>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Video className="text-blue-600 dark:text-blue-500" size={18} />
+                <span className="text-[10px] font-bold text-blue-700 dark:text-blue-500 uppercase tracking-[0.2em]">Interview Rounds</span>
+              </div>
+              <button
+                type="button"
+                onClick={addRound}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+              >
+                <Plus size={14} /> Add round
+              </button>
             </div>
 
-            <div className="space-y-3">
-              <div className="flex items-center gap-3">
-                <Calendar className="text-slate-400" size={16} />
-                <span className="text-xs text-slate-500 dark:text-slate-400">Date & Time:</span>
-                <input
-                  type="datetime-local"
-                  value={toDatetimeLocalValue(formData.interviewDate)}
-                  onChange={e => setFormData(p => ({ ...p, interviewDate: e.target.value || '' }))}
-                  className="px-3 py-1.5 text-sm bg-white dark:bg-slate-800 border border-blue-200 dark:border-blue-800 rounded-lg focus:border-blue-500 outline-none text-slate-700 dark:text-slate-300"
-                />
-                {formData.interviewDate && (
+            {interviews.length === 0 && (
+              <p className="text-sm text-slate-400 dark:text-slate-600 italic">No interview rounds yet. Add one when an interview is scheduled.</p>
+            )}
+
+            {interviews.map((round, idx) => (
+              <div key={round.id} className="space-y-3 p-3 bg-white dark:bg-slate-900/40 border border-blue-100 dark:border-blue-900/40 rounded-xl">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-600 dark:text-slate-300">Round {idx + 1}</span>
                   <button
                     type="button"
-                    onClick={() => setFormData(p => ({ ...p, interviewDate: '', interviewReminderEnabled: false }))}
-                    className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                    onClick={() => removeRound(round.id)}
+                    className="p-1 text-slate-400 hover:text-rose-500 transition-colors rounded-lg"
                   >
-                    Clear
+                    <Trash2 size={14} />
                   </button>
-                )}
-              </div>
+                </div>
 
-              {formData.interviewDate && (
-                <>
-                  <label className="flex items-center gap-3 cursor-pointer">
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <Calendar className="text-slate-400" size={16} />
                     <input
-                      type="checkbox"
-                      checked={formData.interviewReminderEnabled || false}
-                      onChange={e => setFormData(p => ({ ...p, interviewReminderEnabled: e.target.checked }))}
-                      className="w-5 h-5 rounded border-blue-300 dark:border-blue-700 text-blue-600 focus:ring-blue-500"
+                      type="datetime-local"
+                      value={toDatetimeLocalValue(round.scheduledAt)}
+                      onChange={e => updateRound(round.id, { scheduledAt: e.target.value || '' })}
+                      className="px-3 py-1.5 text-sm bg-white dark:bg-slate-800 border border-blue-200 dark:border-blue-800 rounded-lg focus:border-blue-500 outline-none text-slate-700 dark:text-slate-300"
                     />
-                    <span className="text-sm text-slate-700 dark:text-slate-300">Remind me before the interview</span>
-                  </label>
-
-                  <p className="text-xs text-blue-600 dark:text-blue-500 flex items-center gap-1.5">
-                    <Video size={12} />
-                    Interview scheduled for {(() => {
-                      const date = new Date(formData.interviewDate!);
-                      return `${date.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })} at ${date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
-                    })()}
-                  </p>
-                </>
-              )}
-
-              {editingJob?.interviewReminderSentAt && (
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Reminder sent: {new Date(editingJob.interviewReminderSentAt).toLocaleDateString()}
-                </p>
-              )}
-
-              {(formData.interviewDate || formData.interviewOutcome) && (
-                <div className="space-y-3 pt-1">
-                  <div className="space-y-2">
-                    <span className="text-xs text-slate-500 dark:text-slate-400">Outcome:</span>
-                    <div className="flex gap-2 flex-wrap">
-                      {[
-                        { value: InterviewOutcome.PENDING, label: 'Pending', icon: <MinusCircle size={14} />, active: 'bg-slate-600 text-white', inactive: 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700' },
-                        { value: InterviewOutcome.PASSED, label: 'Passed', icon: <CheckCircle2 size={14} />, active: 'bg-emerald-600 text-white', inactive: 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700' },
-                        { value: InterviewOutcome.FAILED, label: 'Failed', icon: <XCircle size={14} />, active: 'bg-rose-600 text-white', inactive: 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700' },
-                        { value: InterviewOutcome.DECLINED, label: 'Declined', icon: <MinusCircle size={14} />, active: 'bg-amber-600 text-white', inactive: 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700' },
-                      ].map(opt => (
-                        <button
-                          key={opt.value}
-                          type="button"
-                          onClick={() => setFormData(p => ({ ...p, interviewOutcome: p.interviewOutcome === opt.value ? undefined : opt.value }))}
-                          className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${formData.interviewOutcome === opt.value ? opt.active : opt.inactive}`}
-                        >
-                          {opt.icon}{opt.label}
-                        </button>
-                      ))}
-                    </div>
                   </div>
+                  <select
+                    value={round.type ?? ''}
+                    onChange={e => updateRound(round.id, { type: e.target.value })}
+                    className="px-3 py-1.5 text-sm bg-white dark:bg-slate-800 border border-blue-200 dark:border-blue-800 rounded-lg focus:border-blue-500 outline-none text-slate-700 dark:text-slate-300 cursor-pointer"
+                  >
+                    <option value="">Type…</option>
+                    {resolvedInterviewTypes.map(t => (
+                      <option key={t.value} value={t.value}>{t.label}</option>
+                    ))}
+                    {round.type && !resolvedInterviewTypes.find(t => t.value === round.type) && (
+                      <option value={round.type}>{round.type}</option>
+                    )}
+                  </select>
+                </div>
 
-                  <div className="space-y-1.5">
-                    <span className="text-xs text-slate-500 dark:text-slate-400">Interview Notes:</span>
-                    <textarea
-                      rows={3}
-                      value={formData.interviewNotes || ''}
-                      onChange={e => setFormData(p => ({ ...p, interviewNotes: e.target.value }))}
-                      placeholder="Questions asked, topics covered, things to follow up on..."
-                      className="w-full px-3 py-2.5 bg-white dark:bg-slate-800 border border-blue-200 dark:border-blue-800 focus:border-blue-500 dark:focus:border-blue-500 rounded-xl outline-none transition-all resize-none text-slate-800 dark:text-slate-200 text-sm leading-relaxed"
-                    />
+                <div className="space-y-2">
+                  <span className="text-xs text-slate-500 dark:text-slate-400">Outcome:</span>
+                  <div className="flex gap-2 flex-wrap">
+                    {OUTCOME_OPTIONS.map(opt => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => updateRound(round.id, { outcome: round.outcome === opt.value ? undefined : opt.value })}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${round.outcome === opt.value ? opt.active : opt.inactive}`}
+                      >
+                        {opt.icon}{opt.label}
+                      </button>
+                    ))}
                   </div>
                 </div>
-              )}
-            </div>
+
+                <div className="space-y-1.5">
+                  <span className="text-xs text-slate-500 dark:text-slate-400">Notes:</span>
+                  <textarea
+                    rows={2}
+                    value={round.notes ?? ''}
+                    onChange={e => updateRound(round.id, { notes: e.target.value })}
+                    placeholder="Questions asked, topics covered, things to follow up on..."
+                    className="w-full px-3 py-2.5 bg-white dark:bg-slate-800 border border-blue-200 dark:border-blue-800 focus:border-blue-500 dark:focus:border-blue-500 rounded-xl outline-none transition-all resize-none text-slate-800 dark:text-slate-200 text-sm leading-relaxed"
+                  />
+                </div>
+              </div>
+            ))}
+
+            {hasScheduledRound && (
+              <label className="flex items-center gap-3 cursor-pointer pt-1">
+                <input
+                  type="checkbox"
+                  checked={formData.interviewReminderEnabled || false}
+                  onChange={e => setFormData(p => ({ ...p, interviewReminderEnabled: e.target.checked }))}
+                  className="w-5 h-5 rounded border-blue-300 dark:border-blue-700 text-blue-600 focus:ring-blue-500"
+                />
+                <span className="text-sm text-slate-700 dark:text-slate-300">Remind me before the next interview</span>
+              </label>
+            )}
+
+            {editingJob?.interviewReminderSentAt && (
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Reminder sent: {new Date(editingJob.interviewReminderSentAt).toLocaleDateString()}
+              </p>
+            )}
           </div>
 
           {/* Status History - only show when editing */}

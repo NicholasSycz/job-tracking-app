@@ -1,6 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { ChevronLeft, ChevronRight, Plus, X, Clock, Briefcase } from 'lucide-react';
 import { JobApplication, CalendarEvent, EventType, ApplicationStatus } from '../types';
+import { getInterviews } from '../utils/interview';
+import { DEFAULT_INTERVIEW_TYPES } from '../constants';
 import { useTheme } from '../contexts/ThemeContext';
 import EventModal from './EventModal';
 import JobModal from './JobModal';
@@ -98,20 +100,23 @@ const CalendarView: React.FC<Props> = ({ applications, calendarEvents, onEditJob
       map[dateKey].push(event);
     };
 
-    // Job interviews
+    // Job interviews (one event per round)
     applications.forEach(app => {
-      if (app.interviewDate) {
-        const d = new Date(app.interviewDate);
+      getInterviews(app).forEach((round, idx) => {
+        const d = new Date(round.scheduledAt);
         const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+        const typeLabel = round.type
+          ? (DEFAULT_INTERVIEW_TYPES.find(t => t.value === round.type)?.label ?? round.type)
+          : 'Interview';
         addEvent(key, {
-          id: `interview-${app.id}`,
-          label: `${app.company} — Interview`,
-          time: formatTime(app.interviewDate),
+          id: `interview-${app.id}-${round.id || idx}`,
+          label: `${app.company} — ${typeLabel}`,
+          time: formatTime(round.scheduledAt),
           ...EVENT_COLORS.interview,
           source: 'job-interview',
           job: app,
         });
-      }
+      });
       if (app.followUpDate) {
         const d = new Date(app.followUpDate);
         const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
