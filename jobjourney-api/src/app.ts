@@ -9,6 +9,7 @@ import goalsRoutes from "./routes/goals";
 import messagesRoutes from "./routes/messages";
 import membersRoutes from "./routes/members";
 import eventsRoutes from "./routes/events";
+import healthRoutes from "./routes/health";
 import { errorHandler } from "./middleware/errorHandler";
 import { CORS_ORIGINS } from "./config";
 
@@ -24,6 +25,8 @@ app.use(
 );
 
 app.use(express.json());
+
+app.use(healthRoutes);
 
 // Routes without rate limiting for tests
 app.use("/auth", authRoutes);

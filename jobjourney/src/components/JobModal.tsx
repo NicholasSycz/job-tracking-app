@@ -4,6 +4,7 @@ import { JobApplication, JobApplicationCreateInput, ApplicationStatus, Interview
 import { DEFAULT_JOB_SOURCES, DEFAULT_RECRUITING_SERVICES, DEFAULT_INTERVIEW_TYPES } from '../constants';
 import { getInterviews } from '../utils/interview';
 import StatusHistory from './StatusHistory';
+import { createId } from '../utils/id';
 
 interface Props {
   isOpen: boolean;
@@ -106,7 +107,7 @@ const JobModal: React.FC<Props> = ({ isOpen, onClose, onSave, editingJob, isSavi
   const removeRound = (id: string) =>
     setFormData(p => ({ ...p, interviews: (p.interviews ?? []).filter(r => r.id !== id) }));
   const addRound = () =>
-    setFormData(p => ({ ...p, interviews: [...(p.interviews ?? []), { id: crypto.randomUUID(), type: '', scheduledAt: '', outcome: undefined, notes: '' }] }));
+    setFormData(p => ({ ...p, interviews: [...(p.interviews ?? []), { id: createId(), type: '', scheduledAt: '', outcome: undefined, notes: '' }] }));
   const hasScheduledRound = interviews.some(r => r.scheduledAt);
 
   if (!isOpen) return null;
@@ -118,7 +119,7 @@ const JobModal: React.FC<Props> = ({ isOpen, onClose, onSave, editingJob, isSavi
     const cleanInterviews: InterviewRound[] = (formData.interviews ?? [])
       .filter(r => r.scheduledAt)
       .map(r => ({
-        id: r.id || crypto.randomUUID(),
+        id: r.id || createId(),
         type: r.type ?? '',
         scheduledAt: new Date(r.scheduledAt).toISOString(),
         outcome: r.outcome,

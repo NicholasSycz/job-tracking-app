@@ -10,6 +10,7 @@ import goalsRoutes from "./routes/goals";
 import messagesRoutes from "./routes/messages";
 import membersRoutes from "./routes/members";
 import eventsRoutes from "./routes/events";
+import healthRoutes from "./routes/health";
 import { errorHandler } from "./middleware/errorHandler";
 import { PORT, isOriginAllowed, validateConfig } from "./config";
 import { authLimiter, apiLimiter } from "./middleware/rateLimit";
@@ -45,6 +46,8 @@ app.use(express.json());
 
 // Serve uploaded files (avatars, etc.)
 app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
+
+app.use(healthRoutes);
 
 // Apply rate limiters
 app.use("/auth", authLimiter, authRoutes);

@@ -1,10 +1,7 @@
-/**
- * Frontend configuration
- * Uses Vite environment variables (import.meta.env.VITE_*)
- */
+// Falls back to the local API server; set VITE_API_BASE_URL when the backend
+// is hosted elsewhere. Empty or whitespace-only values count as unset.
+const configured = import.meta.env.VITE_API_BASE_URL?.trim();
 
-// API Base URL - defaults to localhost:4000 in development
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:4000";
+export const API_BASE_URL = (configured || "http://localhost:4000").replace(/\/+$/, "");
 
-// Convenience export for API endpoints
 export const API_URL = `${API_BASE_URL}/api`;
