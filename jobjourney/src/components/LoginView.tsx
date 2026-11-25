@@ -6,16 +6,17 @@ import { API_BASE_URL } from "../config";
 interface Props {
   onLogin: (user: AuthUser) => void;
   inviteToken?: string | null;
+  initialResetToken?: string | null;
 }
 
 type AuthMode = "login" | "signup" | "forgot-password" | "reset-password";
 
-const LoginView: React.FC<Props> = ({ onLogin, inviteToken }) => {
-  const [mode, setMode] = useState<AuthMode>(inviteToken ? "signup" : "login");
+const LoginView: React.FC<Props> = ({ onLogin, inviteToken, initialResetToken }) => {
+  const [mode, setMode] = useState<AuthMode>(initialResetToken ? "reset-password" : inviteToken ? "signup" : "login");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [resetToken, setResetToken] = useState("");
+  const [resetToken, setResetToken] = useState(initialResetToken ?? "");
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [googleConfigured, setGoogleConfigured] = useState(false);
@@ -29,18 +30,6 @@ const LoginView: React.FC<Props> = ({ onLogin, inviteToken }) => {
       .then((res) => res.json())
       .then((data) => setGoogleConfigured(data.configured))
       .catch(() => setGoogleConfigured(false));
-  }, []);
-
-  // Check for reset token in URL
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const token = params.get("token");
-    if (token) {
-      setResetToken(token);
-      setMode("reset-password");
-      // Clean up URL
-      window.history.replaceState({}, document.title, window.location.pathname);
-    }
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {

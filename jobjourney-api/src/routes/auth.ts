@@ -1,4 +1,5 @@
 import { Router } from "express";
+import type { Prisma, TenantInvite } from "@prisma/client";
 import { randomBytes } from "crypto";
 import fs from "fs";
 import path from "path";
@@ -70,25 +71,25 @@ router.get("/ping", (_req, res) => {
 
 // Silently attach `userId` to every non-expired, unaccepted invite addressed to `email`.
 // Returns the list of tenant IDs the user newly joined (excludes tenants they were already in).
-async function consumePendingInvitesForEmail(userId: string, email: string): Promise<string[]> {
+async function consumePendingInvitesForEmail(userId: string, email: string, db: Prisma.TransactionClient = prisma): Promise<string[]> {
   const lower = email.toLowerCase();
   const now = new Date();
-  const invites = await prisma.tenantInvite.findMany({
+  const invites = await db.tenantInvite.findMany({
     where: { email: lower, acceptedAt: null, expiresAt: { gt: now } },
   });
 
   const newlyJoined: string[] = [];
   for (const invite of invites) {
-    const existing = await prisma.tenantUser.findUnique({
+    const existing = await db.tenantUser.findUnique({
       where: { tenantId_userId: { tenantId: invite.tenantId, userId } },
     });
     if (!existing) {
-      await prisma.tenantUser.create({
+      await db.tenantUser.create({
         data: { tenantId: invite.tenantId, userId, role: invite.role },
       });
       newlyJoined.push(invite.tenantId);
     }
-    await prisma.tenantInvite.update({
+    await db.tenantInvite.update({
       where: { id: invite.id },
       data: { acceptedAt: now },
     });
@@ -97,8 +98,8 @@ async function consumePendingInvitesForEmail(userId: string, email: string): Pro
   return newlyJoined;
 }
 
-async function consumeInviteForUser(inviteToken: string, userId: string, userEmail: string): Promise<string | null> {
-  const invite = await prisma.tenantInvite.findUnique({ where: { token: inviteToken } });
+async function findValidInvite(inviteToken: string, userEmail: string, db: Prisma.TransactionClient) {
+  const invite = await db.tenantInvite.findUnique({ where: { token: inviteToken } });
   if (!invite) {
     throw new ValidationError("Invite is invalid");
   }
@@ -112,17 +113,20 @@ async function consumeInviteForUser(inviteToken: string, userId: string, userEma
     throw new ForbiddenError("Invite was issued to a different email address");
   }
 
-  // Attach user to the invite's tenant if not already a member.
-  const existing = await prisma.tenantUser.findUnique({
+  return invite;
+}
+
+async function consumeInviteForUser(invite: TenantInvite, userId: string, db: Prisma.TransactionClient = prisma): Promise<string> {
+  const existing = await db.tenantUser.findUnique({
     where: { tenantId_userId: { tenantId: invite.tenantId, userId } },
   });
   if (!existing) {
-    await prisma.tenantUser.create({
+    await db.tenantUser.create({
       data: { tenantId: invite.tenantId, userId, role: invite.role },
     });
   }
 
-  await prisma.tenantInvite.update({
+  await db.tenantInvite.update({
     where: { id: invite.id },
     data: { acceptedAt: new Date() },
   });
@@ -147,46 +151,48 @@ router.post("/signup", validate(schemas.signup), asyncHandler(async (req, res) =
 
   const passwordHash = await bcrypt.hash(password, 10);
 
-  // Create user
-  const user = await prisma.user.create({
-    data: {
-      email,
-      passwordHash,
-      name: name?.trim() ? name.trim() : null,
-      isActive: true,
-    },
-    select: { id: true, email: true, name: true, isActive: true, avatarUrl: true },
-  });
+  const { user, tenantId, tenantUser } = await prisma.$transaction(async (tx) => {
+    // Validate before writing, then keep the account, memberships and invite
+    // consumption atomic if any later step fails.
+    const invite = inviteToken ? await findValidInvite(inviteToken, email, tx) : null;
 
-  let tenantId: string | null = null;
-
-  if (inviteToken) {
-    // Explicit invite-link flow: attach to the inviting tenant.
-    tenantId = await consumeInviteForUser(inviteToken, user.id, user.email);
-  }
-
-  // Auto-join any other tenants that have a pending invite for this email.
-  const autoJoined = await consumePendingInvitesForEmail(user.id, user.email);
-  if (!tenantId && autoJoined.length > 0) {
-    tenantId = autoJoined[0];
-  }
-
-  if (!tenantId) {
-    // No invites at all: create the user's personal workspace as owner.
-    const tenant = await prisma.tenant.create({
+    const user = await tx.user.create({
       data: {
-        name: `${user.name ?? "My"} Workspace`,
-        tenantUsers: {
-          create: { userId: user.id, role: "owner" },
-        },
+        email,
+        passwordHash,
+        name: name?.trim() ? name.trim() : null,
+        isActive: true,
       },
+      select: { id: true, email: true, name: true, isActive: true, avatarUrl: true },
     });
-    tenantId = tenant.id;
-  }
 
-  const tenantUser = await prisma.tenantUser.findUnique({
-    where: { tenantId_userId: { tenantId, userId: user.id } },
-    select: { role: true },
+    let tenantId = invite ? await consumeInviteForUser(invite, user.id, tx) : null;
+
+    // Auto-join any other tenants that have a pending invite for this email.
+    const autoJoined = await consumePendingInvitesForEmail(user.id, user.email, tx);
+    if (!tenantId && autoJoined.length > 0) {
+      tenantId = autoJoined[0];
+    }
+
+    if (!tenantId) {
+      // No invites at all: create the user's personal workspace as owner.
+      const tenant = await tx.tenant.create({
+        data: {
+          name: `${user.name ?? "My"} Workspace`,
+          tenantUsers: {
+            create: { userId: user.id, role: "owner" },
+          },
+        },
+      });
+      tenantId = tenant.id;
+    }
+
+    const tenantUser = await tx.tenantUser.findUnique({
+      where: { tenantId_userId: { tenantId, userId: user.id } },
+      select: { role: true },
+    });
+
+    return { user, tenantId, tenantUser };
   });
 
   const token = signToken(user.id);
@@ -212,7 +218,8 @@ router.post(
       throw new NotFoundError("User not found");
     }
 
-    const tenantId = await consumeInviteForUser(token, user.id, user.email);
+    const invite = await findValidInvite(token, user.email, prisma);
+    const tenantId = await consumeInviteForUser(invite, user.id);
     res.json({ tenantId });
   })
 );

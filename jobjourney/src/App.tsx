@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 
 import { JobApplication, ViewType } from "./types";
@@ -15,7 +15,7 @@ import BulkImportModal from "./components/BulkImportModal";
 import Sidebar from "./components/layout/Sidebar";
 import Header from "./components/layout/Header";
 import MobileBottomNav from "./components/layout/MobileBottomNav";
-import { useToast } from "./contexts/ToastContext";
+import { ToastProvider, useToast } from "./contexts/ToastContext";
 import { useTheme } from "./contexts/ThemeContext";
 import { useAuth } from "./hooks/useAuth";
 import { useApplications } from "./hooks/useApplications";
@@ -24,7 +24,7 @@ import { useSettings } from "./hooks/useSettings";
 import { useCalendarEvents } from "./hooks/useCalendarEvents";
 import { useUnreadCount } from "./hooks/useUnreadCount";
 
-const App: React.FC = () => {
+const AppSession: React.FC<{ onSessionEnd: () => void }> = ({ onSessionEnd }) => {
   const { showError } = useToast();
   const { theme, toggleTheme } = useTheme();
   const darkMode = theme === "dark";
@@ -68,10 +68,17 @@ const App: React.FC = () => {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const active = useRef(true);
+
+  useEffect(() => {
+    active.current = true;
+    return () => { active.current = false; };
+  }, []);
 
   const loadData = useCallback(async () => {
     try {
       await loadApplications();
+      if (!active.current) return;
 
       // Goals, settings and calendar events load independently so one failing
       // request doesn't blank out the others (e.g. a failed events fetch must
@@ -86,6 +93,7 @@ const App: React.FC = () => {
       const failed = results.filter(
         (r): r is PromiseRejectedResult => r.status === "rejected"
       );
+      if (!active.current) return;
       if (failed.length) {
         failed.forEach((r) =>
           console.error("Failed to load goals/settings/events:", r.reason)
@@ -93,6 +101,7 @@ const App: React.FC = () => {
         showError("Partial load", "Some of your data couldn't be loaded. Please refresh.");
       }
     } catch (err) {
+      if (!active.current) return;
       console.error("Backend connection failed.", err);
       showError("Connection Failed", "Unable to load your applications. Please try again.");
       clearApplications();
@@ -107,7 +116,7 @@ const App: React.FC = () => {
     showError,
   ]);
 
-  const { user, isLoading, pendingInviteToken, login, logout, updateUser } = useAuth({
+  const { user, isLoading, pendingInviteToken, resetToken, login, logout, updateUser } = useAuth({
     onAuthenticated: loadData,
   });
 
@@ -140,13 +149,13 @@ const App: React.FC = () => {
 
   const handleSignOut = useCallback(() => {
     logout();
-    clearApplications();
-  }, [logout, clearApplications]);
+    onSessionEnd();
+  }, [logout, onSessionEnd]);
 
   const openImportModal = useCallback(() => setIsImportModalOpen(true), []);
 
   if (!user) {
-    return <LoginView onLogin={login} inviteToken={pendingInviteToken} />;
+    return <LoginView onLogin={login} inviteToken={pendingInviteToken} initialResetToken={resetToken} />;
   }
 
   return (
@@ -273,6 +282,19 @@ const App: React.FC = () => {
         onAddApplication={openAddModal}
       />
     </div>
+  );
+};
+
+const App: React.FC = () => {
+  const [sessionKey, setSessionKey] = useState(0);
+  const endSession = useCallback(() => setSessionKey(key => key + 1), []);
+
+  // Discard user data, modals and notifications together. Late responses belong
+  // to the unmounted session and cannot populate the next account's state.
+  return (
+    <ToastProvider key={sessionKey}>
+      <AppSession onSessionEnd={endSession} />
+    </ToastProvider>
   );
 };
 
