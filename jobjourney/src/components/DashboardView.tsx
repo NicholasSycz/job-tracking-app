@@ -2,7 +2,7 @@
 import React from 'react';
 import { JobApplication, ApplicationStatus, MonthlyGoal } from '../types';
 import { hasInterview } from '../utils/interview';
-import { Briefcase, Clock, CheckCircle2, XCircle, ChevronRight } from 'lucide-react';
+import { Briefcase, Clock, CheckCircle2, Trophy, ChevronRight } from 'lucide-react';
 
 interface Props {
   applications: JobApplication[];
@@ -40,7 +40,7 @@ const DashboardView: React.FC<Props> = ({ applications, onEdit, currentGoal }) =
         <StatCard title="Total Applied" value={stats.total} icon={<Briefcase className="text-blue-600 dark:text-blue-400" />} color="blue" />
         <StatCard title="Active Stage" value={stats.active} icon={<Clock className="text-amber-600 dark:text-amber-400" />} color="amber" />
         <StatCard title="Interviews" value={stats.interviews} icon={<CheckCircle2 className="text-emerald-600 dark:text-emerald-400" />} color="emerald" />
-        <StatCard title="Offers" value={stats.offers} icon={<XCircle className="text-rose-600 dark:text-rose-400 rotate-180" />} color="rose" />
+        <StatCard title="Offers" value={stats.offers} icon={<Trophy className="text-violet-600 dark:text-violet-400" />} color="violet" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -107,13 +107,13 @@ const StatCard = ({ title, value, icon, color }: { title: string, value: number,
     blue: 'bg-blue-50',
     amber: 'bg-amber-50',
     emerald: 'bg-emerald-50',
-    rose: 'bg-rose-50'
+    violet: 'bg-violet-50'
   };
   const darkColors: Record<string, string> = {
     blue: 'dark:bg-blue-900/20',
     amber: 'dark:bg-amber-900/20',
     emerald: 'dark:bg-emerald-900/20',
-    rose: 'dark:bg-rose-900/20'
+    violet: 'dark:bg-violet-900/20'
   };
   return (
     <div className="bg-white dark:bg-slate-950 p-4 sm:p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm transition-colors">
