@@ -15,7 +15,7 @@ export interface NavItem {
   icon: LucideIcon;
   /** Label shown in the sidebar. */
   label: string;
-  /** Shorter label for the cramped mobile bottom bar. */
+  /** Shorter label for the mobile bottom bar. */
   shortLabel: string;
   /** Whether this item carries the unread-message badge. */
   showsUnreadBadge?: boolean;
@@ -37,12 +37,15 @@ export const SIDEBAR_NAV: NavItem[] = [
   SETTINGS,
 ];
 
-// The mobile bar deliberately differs: Calendar and Messages come before Analytics.
+// Keep the main mobile destinations spacious; secondary pages live under More.
 export const MOBILE_NAV: NavItem[] = [
   DASHBOARD,
   APPLICATIONS,
   CALENDAR,
   MESSAGES,
+];
+
+export const MOBILE_MORE_NAV: NavItem[] = [
   ANALYTICS,
   SETTINGS,
 ];

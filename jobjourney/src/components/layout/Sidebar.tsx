@@ -1,5 +1,5 @@
 import React from "react";
-import { Plus, Sun, Moon, LogOut, X } from "lucide-react";
+import { Plus, Sun, Moon, LogOut } from "lucide-react";
 
 import { AuthUser, ViewType } from "../../types";
 import { getAvatarUrl } from "../../utils/avatar";
@@ -9,10 +9,8 @@ interface Props {
   user: AuthUser;
   currentView: ViewType;
   unreadCount: number;
-  isOpen: boolean;
   darkMode: boolean;
   onNavigate: (view: ViewType) => void;
-  onClose: () => void;
   onToggleTheme: () => void;
   onAddApplication: () => void;
   onSignOut: () => void;
@@ -22,28 +20,16 @@ const Sidebar: React.FC<Props> = ({
   user,
   currentView,
   unreadCount,
-  isOpen,
   darkMode,
   onNavigate,
-  onClose,
   onToggleTheme,
   onAddApplication,
   onSignOut,
 }) => (
-  <>
-    {isOpen && (
-      <div
-        className="fixed inset-0 bg-slate-900/50 dark:bg-slate-950/60 z-40 lg:hidden"
-        onClick={onClose}
-      />
-    )}
-
     <aside
-      className={`fixed lg:static inset-y-0 left-0 z-50 w-64 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 flex flex-col transition-transform duration-300 lg:translate-x-0 ${
-        isOpen ? "translate-x-0" : "-translate-x-full"
-      }`}
+      className="hidden lg:flex min-h-0 w-64 shrink-0 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 flex-col"
     >
-      <div className="p-6">
+      <div className="min-h-0 overflow-y-auto p-6">
         <div className="flex items-center justify-between mb-10">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-emerald-600 rounded-xl flex items-center justify-center text-white font-black text-xl shadow-lg shadow-emerald-200/50 dark:shadow-none">
@@ -53,26 +39,16 @@ const Sidebar: React.FC<Props> = ({
               JobJourney
             </span>
           </div>
-          <button
-            onClick={onClose}
-            aria-label="Close menu"
-            className="lg:hidden p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-900 text-slate-400 transition-colors"
-          >
-            <X size={20} />
-          </button>
         </div>
 
-        <nav className="space-y-1.5">
+        <nav aria-label="Desktop navigation" className="space-y-1.5">
           {SIDEBAR_NAV.map(({ view, icon: Icon, label, showsUnreadBadge }) => {
             const badge = showsUnreadBadge ? unreadCount : 0;
             const isActive = currentView === view;
             return (
               <button
                 key={view}
-                onClick={() => {
-                  onNavigate(view);
-                  onClose();
-                }}
+                onClick={() => onNavigate(view)}
                 aria-current={isActive ? "page" : undefined}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all ${
                   isActive
@@ -96,7 +72,7 @@ const Sidebar: React.FC<Props> = ({
         </nav>
       </div>
 
-      <div className="mt-auto p-4 space-y-2">
+      <div className="mt-auto shrink-0 p-4 space-y-2">
         <div className="bg-slate-50 dark:bg-slate-900/50 rounded-2xl p-3 mb-4 flex items-center gap-3 border border-slate-100 dark:border-slate-800">
           <img
             src={getAvatarUrl(user)}
@@ -126,10 +102,7 @@ const Sidebar: React.FC<Props> = ({
         </button>
 
         <button
-          onClick={() => {
-            onAddApplication();
-            onClose();
-          }}
+          onClick={onAddApplication}
           className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-xl font-bold transition-all shadow-lg shadow-emerald-100 dark:shadow-none group"
         >
           <Plus size={18} className="group-hover:rotate-90 transition-transform" />
@@ -145,7 +118,6 @@ const Sidebar: React.FC<Props> = ({
         </button>
       </div>
     </aside>
-  </>
 );
 
 export default Sidebar;

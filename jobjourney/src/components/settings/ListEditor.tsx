@@ -82,7 +82,7 @@ const ListEditor: React.FC<Props> = ({
       ))}
     </div>
 
-    <div className="flex gap-2 mb-4">{children}</div>
+    <div className="flex flex-wrap sm:flex-nowrap gap-2 mb-4">{children}</div>
 
     <button
       onClick={onSave}
