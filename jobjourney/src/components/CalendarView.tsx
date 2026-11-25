@@ -388,4 +388,4 @@ const CalendarView: React.FC<Props> = ({ applications, calendarEvents, onEditJob
   );
 };
 
-export default CalendarView;
+export default React.memo(CalendarView);

@@ -11,10 +11,29 @@ import {
   CalendarEvent,
   EventType,
 } from "../types";
-import { API_URL } from "../config";
-import { API_BASE_URL } from "../config";
+import { API_BASE_URL, API_URL } from "../config";
 
-const API_BASE = API_URL;
+/**
+ * Error carrying the server's own message, status and error code, so callers
+ * can surface something more useful than "Failed to update application".
+ */
+export class ApiError extends Error {
+  readonly status: number;
+  readonly code?: string;
+  readonly details?: unknown;
+
+  constructor(message: string, status: number, body?: unknown) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+
+    if (body && typeof body === "object") {
+      const payload = body as Record<string, unknown>;
+      if (typeof payload.code === "string") this.code = payload.code;
+      if ("details" in payload) this.details = payload.details;
+    }
+  }
+}
 
 function getAuthHeaders(): HeadersInit {
   const token = localStorage.getItem("auth_token");
@@ -32,356 +51,326 @@ function getTenantId(): string {
   return tenantId;
 }
 
+// Resolved at call time so a missing tenant still throws before the request.
+function tenantUrl(suffix: string): string {
+  return `${API_URL}/tenants/${getTenantId()}${suffix}`;
+}
+
+async function readBody(response: Response): Promise<unknown> {
+  const text = await response.text();
+  if (!text) return undefined;
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return text;
+  }
+}
+
+// The API sends { error, code, details }; `message` is tolerated as a fallback.
+function errorMessage(body: unknown, fallback: string): string {
+  if (body && typeof body === "object") {
+    const { error, message } = body as Record<string, unknown>;
+    if (typeof error === "string" && error.trim()) return error;
+    if (typeof message === "string" && message.trim()) return message;
+  }
+
+  // A short plain-text body is usually a real message; an HTML page is not.
+  if (typeof body === "string") {
+    const text = body.trim();
+    if (text && text.length < 200 && !text.startsWith("<")) return text;
+  }
+
+  return fallback;
+}
+
+interface RequestOptions {
+  method?: string;
+  body?: unknown;
+  /** Used only when the server gave us nothing better. */
+  fallback: string;
+}
+
+async function request<T>(
+  url: string,
+  { method = "GET", body, fallback }: RequestOptions
+): Promise<T> {
+  const response = await fetch(url, {
+    method,
+    headers: getAuthHeaders(),
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
+
+  const payload = await readBody(response);
+
+  if (!response.ok) {
+    throw new ApiError(errorMessage(payload, fallback), response.status, payload);
+  }
+
+  return payload as T;
+}
+
 export const apiService = {
   async fetchApplications(): Promise<JobApplication[]> {
-    const tenantId = getTenantId();
-    const response = await fetch(`${API_BASE}/tenants/${tenantId}/applications`, {
-      headers: getAuthHeaders(),
+    return request(tenantUrl("/applications"), {
+      fallback: "Failed to fetch applications",
     });
-    if (!response.ok) throw new Error("Failed to fetch applications");
-    return await response.json();
   },
 
   async createApplication(
     application: JobApplicationCreateInput
   ): Promise<JobApplication> {
-    const tenantId = getTenantId();
-    const response = await fetch(`${API_BASE}/tenants/${tenantId}/applications`, {
+    return request(tenantUrl("/applications"), {
       method: "POST",
-      headers: getAuthHeaders(),
-      body: JSON.stringify(application),
+      body: application,
+      fallback: "Failed to create application",
     });
-    if (!response.ok) throw new Error("Failed to create application");
-    return await response.json();
   },
 
   async updateApplication(
     id: string,
     updates: Partial<JobApplication>
   ): Promise<JobApplication> {
-    const tenantId = getTenantId();
-    const response = await fetch(`${API_BASE}/tenants/${tenantId}/applications/${id}`, {
+    return request(tenantUrl(`/applications/${id}`), {
       method: "PUT",
-      headers: getAuthHeaders(),
-      body: JSON.stringify(updates),
+      body: updates,
+      fallback: "Failed to update application",
     });
-    if (!response.ok) throw new Error("Failed to update application");
-    return await response.json();
   },
 
   async deleteApplication(id: string): Promise<void> {
-    const tenantId = getTenantId();
-    const response = await fetch(`${API_BASE}/tenants/${tenantId}/applications/${id}`, {
+    await request<void>(tenantUrl(`/applications/${id}`), {
       method: "DELETE",
-      headers: getAuthHeaders(),
+      fallback: "Failed to delete application",
     });
-    if (!response.ok) throw new Error("Failed to delete application");
   },
 
   async bulkDeleteApplications(ids: string[]): Promise<{ deleted: number }> {
-    const tenantId = getTenantId();
-    const response = await fetch(`${API_BASE}/tenants/${tenantId}/applications/bulk`, {
+    return request(tenantUrl("/applications/bulk"), {
       method: "DELETE",
-      headers: getAuthHeaders(),
-      body: JSON.stringify({ ids }),
+      body: { ids },
+      fallback: "Failed to delete applications",
     });
-    if (!response.ok) throw new Error("Failed to delete applications");
-    return await response.json();
   },
 
   async bulkUpdateStatus(ids: string[], status: string): Promise<{ updated: number }> {
-    const tenantId = getTenantId();
-    const response = await fetch(`${API_BASE}/tenants/${tenantId}/applications/bulk`, {
+    return request(tenantUrl("/applications/bulk"), {
       method: "PATCH",
-      headers: getAuthHeaders(),
-      body: JSON.stringify({ ids, status }),
+      body: { ids, status },
+      fallback: "Failed to update applications",
     });
-    if (!response.ok) throw new Error("Failed to update applications");
-    return await response.json();
   },
 
-  async bulkImportApplications(applications: Partial<JobApplication>[]): Promise<{ imported: number; applications: JobApplication[] }> {
-    const tenantId = getTenantId();
-    const response = await fetch(`${API_BASE}/tenants/${tenantId}/applications/bulk`, {
+  async bulkImportApplications(
+    applications: Partial<JobApplication>[]
+  ): Promise<{ imported: number; applications: JobApplication[] }> {
+    return request(tenantUrl("/applications/bulk"), {
       method: "POST",
-      headers: getAuthHeaders(),
-      body: JSON.stringify({ applications }),
+      body: { applications },
+      fallback: "Failed to import applications",
     });
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ message: "Failed to import applications" }));
-      throw new Error(error.message || "Failed to import applications");
-    }
-    return await response.json();
   },
 
   // Monthly Goals
   async fetchCurrentGoal(): Promise<MonthlyGoal> {
-    const response = await fetch(`${API_BASE_URL}/api/goals/current`, {
-      headers: getAuthHeaders(),
+    return request(`${API_URL}/goals/current`, {
+      fallback: "Failed to fetch current goal",
     });
-    if (!response.ok) throw new Error("Failed to fetch current goal");
-    return await response.json();
   },
 
   async updateCurrentGoal(target: number): Promise<MonthlyGoal> {
-    const response = await fetch(`${API_BASE_URL}/api/goals/current`, {
+    return request(`${API_URL}/goals/current`, {
       method: "PUT",
-      headers: getAuthHeaders(),
-      body: JSON.stringify({ target }),
+      body: { target },
+      fallback: "Failed to update goal",
     });
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: "Failed to update goal" }));
-      throw new Error(error.error || error.message || "Failed to update goal");
-    }
-    return await response.json();
   },
 
   async fetchGoalHistory(): Promise<MonthlyGoal[]> {
-    const response = await fetch(`${API_BASE_URL}/api/goals/history`, {
-      headers: getAuthHeaders(),
+    return request(`${API_URL}/goals/history`, {
+      fallback: "Failed to fetch goal history",
     });
-    if (!response.ok) throw new Error("Failed to fetch goal history");
-    return await response.json();
   },
 
   async updateGoalMet(goalId: string, met: boolean): Promise<MonthlyGoal> {
-    const response = await fetch(`${API_BASE_URL}/api/goals/${goalId}/met`, {
+    return request(`${API_URL}/goals/${goalId}/met`, {
       method: "PATCH",
-      headers: getAuthHeaders(),
-      body: JSON.stringify({ met }),
+      body: { met },
+      fallback: "Failed to update goal status",
     });
-    if (!response.ok) throw new Error("Failed to update goal status");
-    return await response.json();
   },
 
   // Tenant members
   async fetchTenantMembers(): Promise<TenantMember[]> {
-    const tenantId = getTenantId();
-    const response = await fetch(`${API_BASE}/tenants/${tenantId}/members`, {
-      headers: getAuthHeaders(),
+    return request(tenantUrl("/members"), {
+      fallback: "Failed to fetch tenant members",
     });
-    if (!response.ok) throw new Error("Failed to fetch tenant members");
-    return await response.json();
   },
 
   // Invites
   async fetchInvites(): Promise<TenantInvite[]> {
-    const tenantId = getTenantId();
-    const response = await fetch(`${API_BASE}/tenants/${tenantId}/invites`, {
-      headers: getAuthHeaders(),
+    return request(tenantUrl("/invites"), {
+      fallback: "Failed to fetch invites",
     });
-    if (!response.ok) throw new Error("Failed to fetch invites");
-    return await response.json();
   },
 
   async createInvite(email: string, role: TenantRole = "member"): Promise<TenantInvite> {
-    const tenantId = getTenantId();
-    const response = await fetch(`${API_BASE}/tenants/${tenantId}/invites`, {
+    return request(tenantUrl("/invites"), {
       method: "POST",
-      headers: getAuthHeaders(),
-      body: JSON.stringify({ email, role }),
+      body: { email, role },
+      fallback: "Failed to create invite",
     });
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: "Failed to create invite" }));
-      throw new Error(error.error || "Failed to create invite");
-    }
-    return await response.json();
   },
 
   async revokeInvite(inviteId: string): Promise<void> {
-    const tenantId = getTenantId();
-    const response = await fetch(`${API_BASE}/tenants/${tenantId}/invites/${inviteId}`, {
+    await request<void>(tenantUrl(`/invites/${inviteId}`), {
       method: "DELETE",
-      headers: getAuthHeaders(),
+      fallback: "Failed to revoke invite",
     });
-    if (!response.ok) throw new Error("Failed to revoke invite");
   },
 
-  async updateMemberRole(userId: string, role: TenantRole): Promise<{ id: string; role: TenantRole }> {
-    const tenantId = getTenantId();
-    const response = await fetch(`${API_BASE}/tenants/${tenantId}/members/${userId}`, {
+  async updateMemberRole(
+    userId: string,
+    role: TenantRole
+  ): Promise<{ id: string; role: TenantRole }> {
+    return request(tenantUrl(`/members/${userId}`), {
       method: "PATCH",
-      headers: getAuthHeaders(),
-      body: JSON.stringify({ role }),
+      body: { role },
+      fallback: "Failed to update member role",
     });
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: "Failed to update member role" }));
-      throw new Error(error.error || error.message || "Failed to update member role");
-    }
-    return await response.json();
   },
 
   async removeMember(userId: string): Promise<void> {
-    const tenantId = getTenantId();
-    const response = await fetch(`${API_BASE}/tenants/${tenantId}/members/${userId}`, {
+    await request<void>(tenantUrl(`/members/${userId}`), {
       method: "DELETE",
-      headers: getAuthHeaders(),
+      fallback: "Failed to remove member",
     });
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: "Failed to remove member" }));
-      throw new Error(error.error || error.message || "Failed to remove member");
-    }
   },
 
   async changePassword(currentPassword: string, newPassword: string): Promise<void> {
-    const response = await fetch(`${API_BASE_URL}/auth/change-password`, {
+    await request<void>(`${API_BASE_URL}/auth/change-password`, {
       method: "POST",
-      headers: getAuthHeaders(),
-      body: JSON.stringify({ currentPassword, newPassword }),
+      body: { currentPassword, newPassword },
+      fallback: "Failed to change password",
     });
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: "Failed to change password" }));
-      throw new Error(error.error || error.message || "Failed to change password");
-    }
   },
 
   async acceptInvite(token: string): Promise<{ tenantId: string }> {
-    const response = await fetch(`${API_BASE_URL}/auth/invite/accept`, {
+    return request(`${API_BASE_URL}/auth/invite/accept`, {
       method: "POST",
-      headers: getAuthHeaders(),
-      body: JSON.stringify({ token }),
+      body: { token },
+      fallback: "Failed to accept invite",
     });
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: "Failed to accept invite" }));
-      throw new Error(error.error || "Failed to accept invite");
-    }
-    return await response.json();
   },
 
   // Conversations + messages
   async fetchConversations(): Promise<Conversation[]> {
-    const tenantId = getTenantId();
-    const response = await fetch(`${API_BASE}/tenants/${tenantId}/conversations`, {
-      headers: getAuthHeaders(),
+    return request(tenantUrl("/conversations"), {
+      fallback: "Failed to fetch conversations",
     });
-    if (!response.ok) throw new Error("Failed to fetch conversations");
-    return await response.json();
   },
 
   async createConversation(recipientUserId: string): Promise<Conversation> {
-    const tenantId = getTenantId();
-    const response = await fetch(`${API_BASE}/tenants/${tenantId}/conversations`, {
+    return request(tenantUrl("/conversations"), {
       method: "POST",
-      headers: getAuthHeaders(),
-      body: JSON.stringify({ recipientUserId }),
+      body: { recipientUserId },
+      fallback: "Failed to start conversation",
     });
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: "Failed to start conversation" }));
-      throw new Error(error.error || "Failed to start conversation");
-    }
-    return await response.json();
   },
 
   async fetchMessages(conversationId: string): Promise<Message[]> {
-    const tenantId = getTenantId();
-    const response = await fetch(
-      `${API_BASE}/tenants/${tenantId}/conversations/${conversationId}/messages`,
-      { headers: getAuthHeaders() }
-    );
-    if (!response.ok) throw new Error("Failed to fetch messages");
-    return await response.json();
+    return request(tenantUrl(`/conversations/${conversationId}/messages`), {
+      fallback: "Failed to fetch messages",
+    });
   },
 
   async sendMessage(conversationId: string, body: string): Promise<Message> {
-    const tenantId = getTenantId();
-    const response = await fetch(
-      `${API_BASE}/tenants/${tenantId}/conversations/${conversationId}/messages`,
-      {
-        method: "POST",
-        headers: getAuthHeaders(),
-        body: JSON.stringify({ body }),
-      }
-    );
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: "Failed to send message" }));
-      throw new Error(error.error || "Failed to send message");
-    }
-    return await response.json();
+    return request(tenantUrl(`/conversations/${conversationId}/messages`), {
+      method: "POST",
+      body: { body },
+      fallback: "Failed to send message",
+    });
   },
 
   async markConversationRead(conversationId: string): Promise<void> {
-    const tenantId = getTenantId();
-    const response = await fetch(
-      `${API_BASE}/tenants/${tenantId}/conversations/${conversationId}/read`,
-      { method: "POST", headers: getAuthHeaders() }
-    );
-    if (!response.ok) throw new Error("Failed to mark conversation as read");
+    await request<void>(tenantUrl(`/conversations/${conversationId}/read`), {
+      method: "POST",
+      fallback: "Failed to mark conversation as read",
+    });
   },
 
   async deleteMessage(messageId: string): Promise<void> {
-    const tenantId = getTenantId();
-    const response = await fetch(`${API_BASE}/tenants/${tenantId}/messages/${messageId}`, {
+    await request<void>(tenantUrl(`/messages/${messageId}`), {
       method: "DELETE",
-      headers: getAuthHeaders(),
+      fallback: "Failed to delete message",
     });
-    if (!response.ok) throw new Error("Failed to delete message");
   },
 
   async fetchUnreadCount(): Promise<number> {
-    const tenantId = getTenantId();
-    const response = await fetch(
-      `${API_BASE}/tenants/${tenantId}/messages/unread-count`,
-      { headers: getAuthHeaders() }
+    const data = await request<{ count: number }>(
+      tenantUrl("/messages/unread-count"),
+      { fallback: "Failed to fetch unread count" }
     );
-    if (!response.ok) throw new Error("Failed to fetch unread count");
-    const data = (await response.json()) as { count: number };
     return data.count;
   },
 
   async fetchEvents(month?: number, year?: number): Promise<CalendarEvent[]> {
-    const tenantId = getTenantId();
     const params = month && year ? `?month=${month}&year=${year}` : "";
-    const response = await fetch(`${API_BASE}/tenants/${tenantId}/events${params}`, {
-      headers: getAuthHeaders(),
+    return request(tenantUrl(`/events${params}`), {
+      fallback: "Failed to fetch events",
     });
-    if (!response.ok) throw new Error("Failed to fetch events");
-    return await response.json();
   },
 
-  async createEvent(event: { title: string; description?: string; startAt: string; endAt?: string; type?: EventType; jobId?: string }): Promise<CalendarEvent> {
-    const tenantId = getTenantId();
-    const response = await fetch(`${API_BASE}/tenants/${tenantId}/events`, {
+  async createEvent(event: {
+    title: string;
+    description?: string;
+    startAt: string;
+    endAt?: string;
+    type?: EventType;
+    jobId?: string;
+  }): Promise<CalendarEvent> {
+    return request(tenantUrl("/events"), {
       method: "POST",
-      headers: getAuthHeaders(),
-      body: JSON.stringify(event),
+      body: event,
+      fallback: "Failed to create event",
     });
-    if (!response.ok) throw new Error("Failed to create event");
-    return await response.json();
   },
 
-  async updateEvent(id: string, updates: Partial<{ title: string; description: string; startAt: string; endAt: string; type: EventType; jobId: string }>): Promise<CalendarEvent> {
-    const tenantId = getTenantId();
-    const response = await fetch(`${API_BASE}/tenants/${tenantId}/events/${id}`, {
+  async updateEvent(
+    id: string,
+    updates: Partial<{
+      title: string;
+      description: string;
+      startAt: string;
+      endAt: string;
+      type: EventType;
+      jobId: string;
+    }>
+  ): Promise<CalendarEvent> {
+    return request(tenantUrl(`/events/${id}`), {
       method: "PUT",
-      headers: getAuthHeaders(),
-      body: JSON.stringify(updates),
+      body: updates,
+      fallback: "Failed to update event",
     });
-    if (!response.ok) throw new Error("Failed to update event");
-    return await response.json();
   },
 
   async deleteEvent(id: string): Promise<void> {
-    const tenantId = getTenantId();
-    const response = await fetch(`${API_BASE}/tenants/${tenantId}/events/${id}`, {
+    await request<void>(tenantUrl(`/events/${id}`), {
       method: "DELETE",
-      headers: getAuthHeaders(),
+      fallback: "Failed to delete event",
     });
-    if (!response.ok) throw new Error("Failed to delete event");
   },
 
   async fetchSettings(): Promise<UserSettings> {
-    const response = await fetch(`${API_BASE_URL}/api/settings`, { headers: getAuthHeaders() });
-    if (!response.ok) throw new Error("Failed to fetch settings");
-    return await response.json();
+    return request(`${API_URL}/settings`, {
+      fallback: "Failed to fetch settings",
+    });
   },
 
   async updateSettings(settings: Partial<UserSettings>): Promise<UserSettings> {
-    const response = await fetch(`${API_BASE_URL}/api/settings`, {
+    return request(`${API_URL}/settings`, {
       method: "PUT",
-      headers: getAuthHeaders(),
-      body: JSON.stringify(settings),
+      body: settings,
+      fallback: "Failed to update settings",
     });
-    if (!response.ok) throw new Error("Failed to update settings");
-    return await response.json();
   },
 };

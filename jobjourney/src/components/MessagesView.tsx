@@ -420,4 +420,4 @@ const MessagesView: React.FC<Props> = ({ currentUser, onUnreadChange }) => {
   );
 };
 
-export default MessagesView;
+export default React.memo(MessagesView);

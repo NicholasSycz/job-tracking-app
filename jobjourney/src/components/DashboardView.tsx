@@ -142,4 +142,4 @@ export const StatusBadge = ({ status }: { status: ApplicationStatus }) => {
   );
 };
 
-export default DashboardView;
+export default React.memo(DashboardView);
