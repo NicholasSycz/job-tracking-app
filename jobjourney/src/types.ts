@@ -104,6 +104,20 @@ export interface UserSettings {
   interviewTypes: { value: string; label: string }[] | null;
 }
 
+export interface NotificationPreferences {
+  followUps: boolean;
+  interviews: boolean;
+  jobsAdded: boolean;
+  jobsUpdated: boolean;
+}
+
+export interface WebPushConfig {
+  configured: boolean;
+  publicKey: string | null;
+  preferences: NotificationPreferences;
+  endpoints: string[];
+}
+
 export interface TenantMember {
   id: string;
   email: string;

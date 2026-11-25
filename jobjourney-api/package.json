@@ -13,6 +13,7 @@
     "@types/node": "^25.0.9",
     "@types/pg": "^8.16.0",
     "@types/supertest": "^6.0.2",
+    "@types/web-push": "^3.6.4",
     "autocannon": "^7.15.0",
     "jest": "^29.7.0",
     "prisma": "^7.2.0",
@@ -31,7 +32,8 @@
     "express-rate-limit": "^7.4.0",
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.1.1",
-    "pg": "^8.17.1"
+    "pg": "^8.17.1",
+    "web-push": "^3.6.7"
   },
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
@@ -41,9 +43,10 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
-    "perf": "ts-node --transpile-only src/__tests__/perf-runner.ts"
+    "perf": "ts-node --transpile-only src/__tests__/perf-runner.ts",
+    "push:keys": "web-push generate-vapid-keys --json"
   },
-    "prisma": {
+  "prisma": {
     "seed": "ts-node prisma/seed.ts"
   }
 }

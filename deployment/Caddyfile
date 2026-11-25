@@ -1,0 +1,21 @@
+https://pi-server.local {
+    tls internal
+
+    @worker path /sw.js
+    header @worker Cache-Control "no-cache"
+
+    handle /api/* {
+        reverse_proxy 127.0.0.1:4000
+    }
+    handle /auth/* {
+        reverse_proxy 127.0.0.1:4000
+    }
+    handle /uploads/* {
+        reverse_proxy 127.0.0.1:4000
+    }
+    handle {
+        root * /srv/jobjourney/dist
+        try_files {path} /index.html
+        file_server
+    }
+}

@@ -10,6 +10,7 @@ import { ForbiddenError, NotFoundError, ValidationError } from "../utils/errors"
 import { validate, schemas } from "../middleware/validate";
 import { fileLogger } from "../utils/fileLogger";
 import type { Job } from "@prisma/client";
+import { applicationChanged, dispatchApplicationNotifications, queueApplicationNotification } from "../services/applicationNotifications";
 
 const router = Router();
 
@@ -171,44 +172,49 @@ router.post("/tenants/:tenantId/applications", requireTenantMember, validate(sch
   const rounds = roundsFromRequest(req.body) ?? [];
   const latest = latestRound(rounds);
 
-  const job = await prisma.job.create({
-    data: {
-      tenantId,
-      createdByUserId: userId,
-      company,
-      role,
-      status: status || "INTERESTED",
-      dateApplied: dateApplied ? new Date(dateApplied) : new Date(),
-      description: description || null,
-      location: location || null,
-      salary: salary || null,
-      link: link || null,
-      notes: notes || null,
-      source: source || null,
-      externalJobId: externalJobId || null,
-      followUpDate: followUpDate ? new Date(followUpDate) : null,
-      reminderEnabled: reminderEnabled || false,
-      interviews: roundsToJson(rounds),
-      interviewDate: earliestRoundDate(rounds),
-      interviewReminderEnabled: interviewReminderEnabled || false,
-      interviewOutcome: latest?.outcome ?? null,
-      interviewNotes: latest?.notes || null,
-      recruitingService: recruitingService || null,
-    },
-  });
+  const job = await prisma.$transaction(async (tx) => {
+    const created = await tx.job.create({
+      data: {
+        tenantId,
+        createdByUserId: userId,
+        company,
+        role,
+        status: status || "INTERESTED",
+        dateApplied: dateApplied ? new Date(dateApplied) : new Date(),
+        description: description || null,
+        location: location || null,
+        salary: salary || null,
+        link: link || null,
+        notes: notes || null,
+        source: source || null,
+        externalJobId: externalJobId || null,
+        followUpDate: followUpDate ? new Date(followUpDate) : null,
+        reminderEnabled: reminderEnabled || false,
+        interviews: roundsToJson(rounds),
+        interviewDate: earliestRoundDate(rounds),
+        interviewReminderEnabled: interviewReminderEnabled || false,
+        interviewOutcome: latest?.outcome ?? null,
+        interviewNotes: latest?.notes || null,
+        recruitingService: recruitingService || null,
+      },
+    });
 
-  // Create initial status history entry
-  await prisma.jobStatusHistory.create({
-    data: {
-      jobId: job.id,
-      status: job.status,
-      changedAt: new Date(),
-      changedByUserId: userId,
-      notes: "Application created",
-    },
+    // Create initial status history entry
+    await tx.jobStatusHistory.create({
+      data: {
+        jobId: created.id,
+        status: created.status,
+        changedAt: new Date(),
+        changedByUserId: userId,
+        notes: "Application created",
+      },
+    });
+    await queueApplicationNotification(tx, tenantId, "JOB_ADDED", "Job added", `${created.role} at ${created.company}`);
+    return created;
   });
 
   fileLogger.event("Application created", { userId, tenantId, company, role, jobId: job.id });
+  dispatchApplicationNotifications();
   res.status(201).json(toJobResponse(job));
 }));
 
@@ -305,6 +311,7 @@ router.post("/tenants/:tenantId/applications/bulk", requireTenantMember, asyncHa
 
       jobs.push(job);
     }
+    await queueApplicationNotification(tx, tenantId, "JOB_ADDED", "Jobs added", `${jobs.length} application${jobs.length === 1 ? "" : "s"} imported`);
     return jobs;
   },
   {
@@ -313,6 +320,7 @@ router.post("/tenants/:tenantId/applications/bulk", requireTenantMember, asyncHa
   });
 
   fileLogger.event("Bulk import", { userId, tenantId, count: createdJobs.length });
+  dispatchApplicationNotifications();
   res.status(201).json({
     imported: createdJobs.length,
     applications: createdJobs.map(toJobResponse),
@@ -392,24 +400,31 @@ router.patch("/tenants/:tenantId/applications/bulk", requireTenantMember, asyncH
 
   const validIds = jobs.map((j) => j.id);
 
-  // Update all jobs
-  await prisma.job.updateMany({
-    where: { id: { in: validIds } },
-    data: { status: status as any },
-  });
+  const changedCount = jobs.filter(job => job.status !== status).length;
+  await prisma.$transaction(async (tx) => {
+    // Update all jobs
+    await tx.job.updateMany({
+      where: { id: { in: validIds } },
+      data: { status: status as any },
+    });
 
-  // Create status history entries for each
-  await prisma.jobStatusHistory.createMany({
-    data: validIds.map((jobId) => ({
-      jobId,
-      status: status as any,
-      changedAt: new Date(),
-      changedByUserId: userId,
-      notes: `Bulk status change to ${status}`,
-    })),
+    // Create status history entries for each
+    await tx.jobStatusHistory.createMany({
+      data: validIds.map((jobId) => ({
+        jobId,
+        status: status as any,
+        changedAt: new Date(),
+        changedByUserId: userId,
+        notes: `Bulk status change to ${status}`,
+      })),
+    });
+    if (changedCount) {
+      await queueApplicationNotification(tx, tenantId, "JOB_UPDATED", "Jobs updated", `${changedCount} application${changedCount === 1 ? "" : "s"} changed to ${status}`);
+    }
   });
 
   fileLogger.event("Bulk status update", { userId, tenantId, count: validIds.length, status });
+  dispatchApplicationNotifications();
   res.json({ updated: validIds.length });
 }));
 
@@ -442,46 +457,53 @@ router.put("/tenants/:tenantId/applications/:id", requireTenantMember, validate(
   const requestedRounds = roundsFromRequest(req.body);
   const reqLatest = requestedRounds ? latestRound(requestedRounds) : null;
 
-  const job = await prisma.job.update({
-    where: { id },
-    data: {
-      company: company ?? existingJob.company,
-      role: role ?? existingJob.role,
-      status: status ?? existingJob.status,
-      dateApplied: dateApplied ? new Date(dateApplied) : existingJob.dateApplied,
-      description: description !== undefined ? description || null : existingJob.description,
-      location: location !== undefined ? location || null : existingJob.location,
-      salary: salary !== undefined ? salary || null : existingJob.salary,
-      link: link !== undefined ? link || null : existingJob.link,
-      notes: notes !== undefined ? notes || null : existingJob.notes,
-      source: source !== undefined ? source || null : existingJob.source,
-      externalJobId: externalJobId !== undefined ? externalJobId || null : existingJob.externalJobId,
-      followUpDate: followUpDate !== undefined ? (followUpDate ? new Date(followUpDate) : null) : existingJob.followUpDate,
-      reminderEnabled: reminderEnabled !== undefined ? reminderEnabled : existingJob.reminderEnabled,
-      interviews: requestedRounds !== undefined ? roundsToJson(requestedRounds) : undefined,
-      interviewDate: requestedRounds !== undefined ? earliestRoundDate(requestedRounds) : existingJob.interviewDate,
-      interviewReminderEnabled: interviewReminderEnabled !== undefined ? interviewReminderEnabled : existingJob.interviewReminderEnabled,
-      interviewOutcome: requestedRounds !== undefined ? (reqLatest?.outcome ?? null) : (interviewOutcome !== undefined ? (interviewOutcome || null) : existingJob.interviewOutcome),
-      interviewNotes: requestedRounds !== undefined ? (reqLatest?.notes || null) : (interviewNotes !== undefined ? (interviewNotes || null) : existingJob.interviewNotes),
-      recruitingService: recruitingService !== undefined ? (recruitingService || null) : existingJob.recruitingService,
-    },
+  const job = await prisma.$transaction(async (tx) => {
+    const updated = await tx.job.update({
+      where: { id },
+      data: {
+        company: company ?? existingJob.company,
+        role: role ?? existingJob.role,
+        status: status ?? existingJob.status,
+        dateApplied: dateApplied ? new Date(dateApplied) : existingJob.dateApplied,
+        description: description !== undefined ? description || null : existingJob.description,
+        location: location !== undefined ? location || null : existingJob.location,
+        salary: salary !== undefined ? salary || null : existingJob.salary,
+        link: link !== undefined ? link || null : existingJob.link,
+        notes: notes !== undefined ? notes || null : existingJob.notes,
+        source: source !== undefined ? source || null : existingJob.source,
+        externalJobId: externalJobId !== undefined ? externalJobId || null : existingJob.externalJobId,
+        followUpDate: followUpDate !== undefined ? (followUpDate ? new Date(followUpDate) : null) : existingJob.followUpDate,
+        reminderEnabled: reminderEnabled !== undefined ? reminderEnabled : existingJob.reminderEnabled,
+        interviews: requestedRounds !== undefined ? roundsToJson(requestedRounds) : undefined,
+        interviewDate: requestedRounds !== undefined ? earliestRoundDate(requestedRounds) : existingJob.interviewDate,
+        interviewReminderEnabled: interviewReminderEnabled !== undefined ? interviewReminderEnabled : existingJob.interviewReminderEnabled,
+        interviewOutcome: requestedRounds !== undefined ? (reqLatest?.outcome ?? null) : (interviewOutcome !== undefined ? (interviewOutcome || null) : existingJob.interviewOutcome),
+        interviewNotes: requestedRounds !== undefined ? (reqLatest?.notes || null) : (interviewNotes !== undefined ? (interviewNotes || null) : existingJob.interviewNotes),
+        recruitingService: recruitingService !== undefined ? (recruitingService || null) : existingJob.recruitingService,
+      },
+    });
+
+    // Record status change in history
+    if (statusChanged) {
+      await tx.jobStatusHistory.create({
+        data: {
+          jobId: updated.id,
+          status: updated.status,
+          changedAt: new Date(),
+          changedByUserId: userId,
+          notes: `Status changed from ${existingJob.status} to ${updated.status}`,
+        },
+      });
+    }
+    if (applicationChanged(existingJob, updated)) {
+      await queueApplicationNotification(tx, tenantId, "JOB_UPDATED", "Job updated", `${updated.role} at ${updated.company}`);
+    }
+    return updated;
   });
 
   fileLogger.event("Application updated", { userId, tenantId, jobId: id, statusChanged: !!statusChanged });
 
-  // Record status change in history
-  if (statusChanged) {
-    await prisma.jobStatusHistory.create({
-      data: {
-        jobId: job.id,
-        status: job.status,
-        changedAt: new Date(),
-        changedByUserId: userId,
-        notes: `Status changed from ${existingJob.status} to ${job.status}`,
-      },
-    });
-  }
-
+  dispatchApplicationNotifications();
   res.json(toJobResponse(job));
 }));
 
@@ -701,15 +723,22 @@ router.patch("/tenants/:tenantId/applications/:id/reminder", requireTenantMember
 
   const { followUpDate, reminderEnabled, reminderSentAt } = req.body;
 
-  const job = await prisma.job.update({
-    where: { id },
-    data: {
-      followUpDate: followUpDate !== undefined ? (followUpDate ? new Date(followUpDate) : null) : existingJob.followUpDate,
-      reminderEnabled: reminderEnabled !== undefined ? reminderEnabled : existingJob.reminderEnabled,
-      reminderSentAt: reminderSentAt !== undefined ? (reminderSentAt ? new Date(reminderSentAt) : null) : existingJob.reminderSentAt,
-    },
+  const job = await prisma.$transaction(async (tx) => {
+    const updated = await tx.job.update({
+      where: { id },
+      data: {
+        followUpDate: followUpDate !== undefined ? (followUpDate ? new Date(followUpDate) : null) : existingJob.followUpDate,
+        reminderEnabled: reminderEnabled !== undefined ? reminderEnabled : existingJob.reminderEnabled,
+        reminderSentAt: reminderSentAt !== undefined ? (reminderSentAt ? new Date(reminderSentAt) : null) : existingJob.reminderSentAt,
+      },
+    });
+    if (applicationChanged(existingJob, updated)) {
+      await queueApplicationNotification(tx, tenantId, "JOB_UPDATED", "Job updated", `${updated.role} at ${updated.company}`);
+    }
+    return updated;
   });
 
+  dispatchApplicationNotifications();
   res.json(toJobResponse(job));
 }));
 

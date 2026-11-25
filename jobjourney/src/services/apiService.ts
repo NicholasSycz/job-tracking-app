@@ -10,6 +10,8 @@ import {
   UserSettings,
   CalendarEvent,
   EventType,
+  NotificationPreferences,
+  WebPushConfig,
 } from "../types";
 import { API_BASE_URL, API_URL } from "../config";
 
@@ -110,6 +112,34 @@ async function request<T>(
 }
 
 export const apiService = {
+  async fetchPushConfig(): Promise<WebPushConfig> {
+    return request(`${API_URL}/notifications/config`, { fallback: "Unable to load notification settings" });
+  },
+
+  async updateNotificationPreferences(preferences: NotificationPreferences): Promise<NotificationPreferences> {
+    return request(`${API_URL}/notifications/preferences`, {
+      method: "PUT", body: preferences, fallback: "Unable to save notification settings",
+    });
+  },
+
+  async subscribePush(subscription: PushSubscriptionJSON): Promise<void> {
+    await request(`${API_URL}/notifications/subscriptions`, {
+      method: "POST", body: subscription, fallback: "Unable to enable notifications on this device",
+    });
+  },
+
+  async unsubscribePush(endpoint: string): Promise<void> {
+    await request(`${API_URL}/notifications/subscriptions`, {
+      method: "DELETE", body: { endpoint }, fallback: "Unable to disable notifications on this device",
+    });
+  },
+
+  async testPush(endpoint: string): Promise<void> {
+    await request(`${API_URL}/notifications/test`, {
+      method: "POST", body: { endpoint }, fallback: "Unable to send the test notification",
+    });
+  },
+
   async fetchApplications(): Promise<JobApplication[]> {
     return request(tenantUrl("/applications"), {
       fallback: "Failed to fetch applications",
