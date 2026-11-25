@@ -14,9 +14,23 @@ interface UseAuthOptions {
 export function useAuth({ onAuthenticated }: UseAuthOptions) {
   const { showSuccess, showError } = useToast();
 
+  // Capture once, before any child effects run. Only this hook consumes auth
+  // URL parameters; password-reset links are identified by their route.
+  const [redirect] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    const isReset = window.location.pathname === "/reset-password";
+    return {
+      oauthToken: isReset ? null : params.get("token"),
+      oauthTenantId: isReset ? null : params.get("tenantId"),
+      oauthError: params.get("error"),
+      inviteToken: params.get("invite"),
+      resetToken: isReset ? params.get("token") : null,
+    };
+  });
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [pendingInviteToken, setPendingInviteToken] = useState<string | null>(null);
+  const [pendingInviteToken, setPendingInviteToken] = useState(redirect.inviteToken);
+  const active = useRef(true);
 
   // Held in a ref so the mount-only session restore always calls the current
   // closure rather than the one captured on first render.
@@ -26,19 +40,21 @@ export function useAuth({ onAuthenticated }: UseAuthOptions) {
   }, [onAuthenticated]);
 
   const acceptInviteToken = useCallback(
-    async (token: string) => {
+    async (token: string, isCurrent = () => active.current) => {
       try {
         const { tenantId } = await apiService.acceptInvite(token);
+        if (!isCurrent()) return;
         localStorage.setItem("tenant_id", tenantId);
         showSuccess("Invite accepted", "You've joined the workspace.");
       } catch (err) {
+        if (!isCurrent()) return;
         console.error("Failed to accept invite:", err);
         showError(
           "Invite error",
           err instanceof Error ? err.message : "Unable to accept invite."
         );
       } finally {
-        setPendingInviteToken(null);
+        if (isCurrent()) setPendingInviteToken(null);
       }
     },
     [showSuccess, showError]
@@ -53,6 +69,7 @@ export function useAuth({ onAuthenticated }: UseAuthOptions) {
       if (pendingInviteToken) {
         await acceptInviteToken(pendingInviteToken);
       }
+      if (!active.current) return;
       try {
         await onAuthenticatedRef.current();
       } finally {
@@ -73,25 +90,19 @@ export function useAuth({ onAuthenticated }: UseAuthOptions) {
   }, []);
 
   useEffect(() => {
+    active.current = true;
+    let cancelled = false;
+    const controller = new AbortController();
     const restoreSession = async () => {
-      // Check for OAuth callback parameters in URL
-      const urlParams = new URLSearchParams(window.location.search);
-      const oauthToken = urlParams.get("token");
-      const oauthTenantId = urlParams.get("tenantId");
-      const oauthError = urlParams.get("error");
-      const inviteParam = urlParams.get("invite");
+      const { oauthToken, oauthTenantId, oauthError, inviteToken: inviteParam, resetToken } = redirect;
 
-      // Clear URL parameters
-      if (oauthToken || oauthError || inviteParam) {
-        window.history.replaceState({}, document.title, window.location.pathname);
+      if (oauthToken || oauthError || inviteParam || resetToken) {
+        const url = new URL(window.location.href);
+        ["token", "tenantId", "error", "invite"].forEach(key => url.searchParams.delete(key));
+        window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
       }
 
-      // Capture invite token for later acceptance (either after login, or
-      // forwarded to signup).
-      if (inviteParam) {
-        setPendingInviteToken(inviteParam);
-      }
-
+      if (resetToken) return;
       if (oauthError) {
         console.error("OAuth error:", oauthError);
         showError("Authentication Failed", oauthError);
@@ -111,7 +122,9 @@ export function useAuth({ onAuthenticated }: UseAuthOptions) {
       try {
         const res = await fetch(`${API_BASE_URL}/auth/me`, {
           headers: { Authorization: `Bearer ${token}` },
+          signal: controller.signal,
         });
+        if (cancelled) return;
 
         if (!res.ok) {
           // token invalid/expired
@@ -122,9 +135,9 @@ export function useAuth({ onAuthenticated }: UseAuthOptions) {
         }
 
         const data = await res.json();
+        if (cancelled) return;
         setUser({ ...(data.user as AuthUser), role: data.role ?? null });
 
-        // Store tenantId from session restore
         if (data.tenantId) {
           localStorage.setItem("tenant_id", data.tenantId);
         }
@@ -132,21 +145,28 @@ export function useAuth({ onAuthenticated }: UseAuthOptions) {
         // If an invite token was in the URL, accept it now that we know the
         // user is authed.
         if (inviteParam) {
-          await acceptInviteToken(inviteParam);
+          await acceptInviteToken(inviteParam, () => !cancelled);
         }
 
+        if (cancelled) return;
         await onAuthenticatedRef.current();
       } catch (err) {
+        if (cancelled) return;
         console.error("Failed to restore session:", err);
         showError("Session Error", "Unable to restore your session. Please log in again.");
       } finally {
-        setIsLoading(false);
+        if (!cancelled) setIsLoading(false);
       }
     };
 
     restoreSession();
+    return () => {
+      active.current = false;
+      cancelled = true;
+      controller.abort();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return { user, isLoading, pendingInviteToken, login, logout, updateUser };
+  return { user, isLoading, pendingInviteToken, resetToken: redirect.resetToken, login, logout, updateUser };
 }

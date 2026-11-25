@@ -73,6 +73,84 @@ describe("Auth Routes", () => {
 
       expect(res.status).toBe(400);
     });
+
+    it.each(["invalid", "expired", "used", "wrong-email"])(
+      "should leave no account behind after a %s invite and allow retry",
+      async (scenario) => {
+        const owner = await request(app).post("/auth/signup").send({
+          email: "invite-owner@example.com", password: "password123", name: "Invite Owner",
+        });
+        expect(owner.status).toBe(200);
+
+        const token = "signup-invite";
+        if (scenario !== "invalid") {
+          await prisma.tenantInvite.create({
+            data: {
+              token,
+              tenantId: owner.body.tenantId,
+              invitedByUserId: owner.body.user.id,
+              email: scenario === "wrong-email" ? "someone-else@example.com" : "invitee@example.com",
+              expiresAt: new Date(Date.now() + (scenario === "expired" ? -60000 : 60000)),
+              acceptedAt: scenario === "used" ? new Date() : null,
+            },
+          });
+        }
+
+        const credentials = { email: "invitee@example.com", password: "password123", name: "Invitee" };
+        const rejected = await request(app).post("/auth/signup").send({ ...credentials, inviteToken: token });
+        expect(rejected.status).toBe(scenario === "wrong-email" ? 403 : 400);
+        expect(await prisma.user.findUnique({ where: { email: credentials.email } })).toBeNull();
+        expect(await prisma.tenant.count()).toBe(1);
+
+        const retry = await request(app).post("/auth/signup").send(credentials);
+        expect(retry.status).toBe(200);
+        const login = await request(app).post("/auth/login").send(credentials);
+        expect(login.status).toBe(200);
+        expect(login.body.tenantId).toBe(retry.body.tenantId);
+      }
+    );
+
+    it.each([true, false])("should atomically join an invited workspace (explicit token: %s)", async (explicit) => {
+      const owner = await request(app).post("/auth/signup").send({
+        email: "invite-owner@example.com", password: "password123", name: "Invite Owner",
+      });
+      expect(owner.status).toBe(200);
+      await prisma.tenantInvite.create({
+        data: {
+          token: "valid-signup-invite", tenantId: owner.body.tenantId,
+          invitedByUserId: owner.body.user.id, email: "invitee@example.com", role: "member",
+          expiresAt: new Date(Date.now() + 60000),
+        },
+      });
+
+      const res = await request(app).post("/auth/signup").send({
+        email: "invitee@example.com", password: "password123", name: "Invitee",
+        ...(explicit ? { inviteToken: "valid-signup-invite" } : {}),
+      });
+      expect(res.status).toBe(200);
+      expect(res.body.tenantId).toBe(owner.body.tenantId);
+      expect(res.body.role).toBe("member");
+      expect(await prisma.tenantUser.count({ where: { userId: res.body.user.id } })).toBe(1);
+      expect(await prisma.tenant.count()).toBe(1);
+      const invite = await prisma.tenantInvite.findUnique({ where: { token: "valid-signup-invite" } });
+      expect(invite?.acceptedAt).not.toBeNull();
+    });
+
+    it("should roll back the user if workspace creation fails", async () => {
+      const first = await request(app).post("/auth/signup").send({
+        email: "first@example.com", password: "password123", name: "Same Name",
+      });
+      expect(first.status).toBe(200);
+
+      // Workspace names are unique, so the second creation fails after the user insert.
+      const credentials = { email: "second@example.com", password: "password123", name: "Same Name" };
+      const failed = await request(app).post("/auth/signup").send(credentials);
+      expect(failed.status).toBe(500);
+      expect(await prisma.user.findUnique({ where: { email: credentials.email } })).toBeNull();
+      expect(await prisma.tenant.count()).toBe(1);
+      const retry = await request(app).post("/auth/signup").send({ ...credentials, name: "Different Name" });
+      expect(retry.status).toBe(200);
+    });
   });
 
   describe("POST /auth/login", () => {
