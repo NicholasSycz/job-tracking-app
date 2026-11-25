@@ -76,7 +76,7 @@ const JobSourcesSection: React.FC<Props> = ({ userSettings, onUpdateSettings }) 
           setNewValue(slugify(e.target.value));
         }}
         onKeyDown={e => e.key === 'Enter' && handleAdd()}
-        className="flex-1 px-3 py-2 text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl outline-none focus:border-violet-400 text-slate-800 dark:text-slate-200"
+        className="basis-full sm:basis-0 flex-1 px-3 py-2 text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl outline-none focus:border-violet-400 text-slate-800 dark:text-slate-200"
       />
       <input
         type="text"
@@ -84,7 +84,7 @@ const JobSourcesSection: React.FC<Props> = ({ userSettings, onUpdateSettings }) 
         value={newValue}
         onChange={e => setNewValue(e.target.value)}
         onKeyDown={e => e.key === 'Enter' && handleAdd()}
-        className="w-32 px-3 py-2 text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl outline-none focus:border-violet-400 text-slate-800 dark:text-slate-200 font-mono"
+        className="flex-1 sm:flex-none sm:w-32 px-3 py-2 text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl outline-none focus:border-violet-400 text-slate-800 dark:text-slate-200 font-mono"
       />
       <button
         onClick={handleAdd}

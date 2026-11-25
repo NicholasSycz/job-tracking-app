@@ -47,7 +47,7 @@ const InterviewRoundsEditor: React.FC<Props> = ({
 
   return (
     <div className="space-y-4 p-4 bg-blue-50/50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800/50 rounded-2xl">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <Video className="text-blue-600 dark:text-blue-500" size={18} />
           <span className="text-[10px] font-bold text-blue-700 dark:text-blue-500 uppercase tracking-[0.2em]">Interview Rounds</span>
@@ -80,13 +80,13 @@ const InterviewRoundsEditor: React.FC<Props> = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2">
-              <Calendar className="text-slate-400" size={16} />
+            <div className="flex min-w-0 max-w-full items-center gap-2">
+              <Calendar className="shrink-0 text-slate-400" size={16} />
               <input
                 type="datetime-local"
                 value={toDatetimeLocalValue(round.scheduledAt)}
                 onChange={e => onUpdateRound(round.id, { scheduledAt: e.target.value || '' })}
-                className="px-3 py-1.5 text-sm bg-white dark:bg-slate-800 border border-blue-200 dark:border-blue-800 rounded-lg focus:border-blue-500 outline-none text-slate-700 dark:text-slate-300"
+                className="min-w-0 w-full px-3 py-1.5 text-sm bg-white dark:bg-slate-800 border border-blue-200 dark:border-blue-800 rounded-lg focus:border-blue-500 outline-none text-slate-700 dark:text-slate-300"
               />
             </div>
             <select

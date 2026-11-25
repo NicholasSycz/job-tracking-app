@@ -26,12 +26,12 @@ const SettingsSection: React.FC<Props> = ({
   borderClass = 'border-slate-200 dark:border-slate-800',
   children,
 }) => (
-  <section className={`bg-white dark:bg-slate-950 rounded-2xl border ${borderClass} p-6 shadow-sm transition-colors`}>
-    <div className="flex items-center gap-3 mb-6">
-      <div className={`w-10 h-10 ${iconClass} rounded-xl flex items-center justify-center`}>
+  <section className={`min-w-0 bg-white dark:bg-slate-950 rounded-2xl border ${borderClass} p-4 sm:p-6 shadow-sm transition-colors`}>
+    <div className="flex flex-wrap items-center gap-3 mb-4 sm:mb-6">
+      <div className={`w-10 h-10 shrink-0 ${iconClass} rounded-xl flex items-center justify-center`}>
         {icon}
       </div>
-      <div className={action ? 'flex-1' : undefined}>
+      <div className="min-w-0 flex-1">
         <h2 className={`text-lg font-bold ${titleClass}`}>{title}</h2>
         <p className="text-sm text-slate-500 dark:text-slate-400">{description}</p>
       </div>

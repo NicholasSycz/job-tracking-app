@@ -211,9 +211,9 @@ const CalendarView: React.FC<Props> = ({ applications, calendarEvents, onEditJob
       {/* Main Calendar */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4 sm:mb-6">
           <div className="flex items-center gap-3">
-            <h2 className="text-2xl font-bold text-slate-800 dark:text-white">
+            <h2 className="text-xl sm:text-2xl font-bold text-slate-800 dark:text-white">
               {MONTHS[viewMonth]} {viewYear}
             </h2>
             <button onClick={goToday} className="px-3 py-1 text-xs font-bold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 rounded-lg transition-colors">

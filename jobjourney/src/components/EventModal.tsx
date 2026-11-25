@@ -96,19 +96,19 @@ const EventModal: React.FC<Props> = ({ isOpen, onClose, onSave, onDelete, editin
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-end bg-slate-900/60 dark:bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-300">
+    <div role="dialog" aria-modal="true" aria-labelledby="event-form-title" className="fixed inset-0 z-50 flex items-center justify-end bg-slate-900/60 dark:bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-300">
       <div className="w-full max-w-lg h-full bg-white dark:bg-slate-950 shadow-2xl flex flex-col animate-in slide-in-from-right duration-500 overflow-y-auto border-l dark:border-slate-800">
         {/* Header */}
-        <div className="sticky top-0 bg-white/80 dark:bg-slate-950/80 backdrop-blur-md border-b border-slate-100 dark:border-slate-800 p-6 flex justify-between items-center z-10">
-          <h2 className="text-xl font-bold text-slate-800 dark:text-white">
+        <div className="mobile-modal-header sticky top-0 bg-white/80 dark:bg-slate-950/80 backdrop-blur-md border-b border-slate-100 dark:border-slate-800 p-4 sm:p-6 flex justify-between items-center z-10">
+          <h2 id="event-form-title" className="text-xl font-bold text-slate-800 dark:text-white">
             {editingEvent ? 'Edit Event' : 'New Event'}
           </h2>
-          <button onClick={onClose} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-900 rounded-full text-slate-400 transition-colors">
+          <button onClick={onClose} aria-label="Close event form" className="p-2.5 hover:bg-slate-100 dark:hover:bg-slate-900 rounded-full text-slate-400 transition-colors">
             <X size={24} />
           </button>
         </div>
 
-        <div className="p-8 space-y-6 flex-1">
+        <div className="p-4 sm:p-8 space-y-6 flex-1">
           {/* Title */}
           <div className="space-y-2">
             <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em]">Title</label>
@@ -142,7 +142,7 @@ const EventModal: React.FC<Props> = ({ isOpen, onClose, onSave, onDelete, editin
           </div>
 
           {/* Date & Time */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em]">Start</label>
               <div className="relative">
@@ -226,7 +226,7 @@ const EventModal: React.FC<Props> = ({ isOpen, onClose, onSave, onDelete, editin
         </div>
 
         {/* Footer */}
-        <div className="sticky bottom-0 bg-white dark:bg-slate-950 border-t border-slate-100 dark:border-slate-800 p-6 flex gap-3">
+        <div className="sticky bottom-0 bg-white dark:bg-slate-950 border-t border-slate-100 dark:border-slate-800 p-4 sm:p-6 flex gap-3" style={{ paddingBottom: "max(1rem, env(safe-area-inset-bottom, 0px))" }}>
           {editingEvent && onDelete && (
             <button
               onClick={handleDelete}

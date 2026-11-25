@@ -141,22 +141,22 @@ const JobModal: React.FC<Props> = ({ isOpen, onClose, onSave, editingJob, isSavi
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-end bg-slate-900/60 dark:bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-300">
+    <div role="dialog" aria-modal="true" aria-labelledby="application-form-title" className="fixed inset-0 z-50 flex items-center justify-end bg-slate-900/60 dark:bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-300">
       <div 
         className="w-full max-w-2xl h-full bg-white dark:bg-slate-950 shadow-2xl flex flex-col animate-in slide-in-from-right duration-500 overflow-y-auto border-l dark:border-slate-800"
       >
-        <div className="sticky top-0 bg-white/80 dark:bg-slate-950/80 backdrop-blur-md border-b border-slate-100 dark:border-slate-800 p-6 flex justify-between items-center z-10 transition-colors">
-          <h2 className="text-xl font-bold text-slate-800 dark:text-white">
+        <div className="mobile-modal-header sticky top-0 bg-white/80 dark:bg-slate-950/80 backdrop-blur-md border-b border-slate-100 dark:border-slate-800 p-4 sm:p-6 flex justify-between items-center gap-2 z-10 transition-colors">
+          <h2 id="application-form-title" className="text-lg sm:text-xl font-bold text-slate-800 dark:text-white">
             {editingJob ? 'Refine Application' : 'Track New Opportunity'}
           </h2>
-          <button onClick={onClose} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-900 rounded-full text-slate-400 transition-colors">
+          <button onClick={onClose} aria-label="Close application form" className="shrink-0 p-2.5 hover:bg-slate-100 dark:hover:bg-slate-900 rounded-full text-slate-400 transition-colors">
             <X size={24} />
           </button>
         </div>
 
-        <div className="p-8 space-y-8 flex-1">
+        <div className="p-4 sm:p-8 space-y-6 sm:space-y-8 flex-1">
           {/* Main Info */}
-          <div className="grid grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
             <div className="space-y-2">
               <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em]">Company</label>
               <div className="relative">
@@ -182,7 +182,7 @@ const JobModal: React.FC<Props> = ({ isOpen, onClose, onSave, editingJob, isSavi
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
              <div className="space-y-2">
                 <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em]">Status</label>
                 <select
@@ -234,7 +234,7 @@ const JobModal: React.FC<Props> = ({ isOpen, onClose, onSave, editingJob, isSavi
              </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
              <div className="space-y-2">
                 <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em]">Location</label>
                 <div className="relative">
@@ -409,18 +409,18 @@ const JobModal: React.FC<Props> = ({ isOpen, onClose, onSave, editingJob, isSavi
           <div className="pb-12" />
         </div>
 
-        <div className="sticky bottom-0 bg-white dark:bg-slate-950 border-t border-slate-100 dark:border-slate-800 p-6 flex gap-4 transition-colors">
+        <div className="sticky bottom-0 bg-white dark:bg-slate-950 border-t border-slate-100 dark:border-slate-800 p-4 sm:p-6 flex gap-3 sm:gap-4 transition-colors" style={{ paddingBottom: "max(1rem, env(safe-area-inset-bottom, 0px))" }}>
           <button
             onClick={onClose}
             disabled={isSaving}
-            className="flex-1 py-3 rounded-2xl border border-slate-200 dark:border-slate-800 font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors disabled:opacity-50"
+            className="min-w-0 flex-1 py-3 rounded-2xl border border-slate-200 dark:border-slate-800 text-sm sm:text-base font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors disabled:opacity-50"
           >
             Cancel
           </button>
           <button
             onClick={handleSave}
             disabled={!formData.company || !formData.role || isSaving}
-            className="flex-2 flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-12 py-3 rounded-2xl font-bold transition-all disabled:opacity-50 shadow-lg shadow-emerald-200 dark:shadow-none"
+            className="min-w-0 flex-1 flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-3 sm:px-8 py-3 rounded-2xl text-sm sm:text-base font-bold transition-all disabled:opacity-50 shadow-lg shadow-emerald-200 dark:shadow-none"
           >
             {isSaving ? <Loader2 size={20} className="animate-spin" /> : <Save size={20} />}
             {isSaving ? 'Saving...' : 'Save Details'}

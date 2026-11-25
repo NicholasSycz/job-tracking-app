@@ -70,7 +70,6 @@ const AppSession: React.FC<{ onSessionEnd: () => void }> = ({ onSessionEnd }) =>
   const [searchQuery, setSearchQuery] = useState("");
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const active = useRef(true);
 
   useEffect(() => {
@@ -166,30 +165,28 @@ const AppSession: React.FC<{ onSessionEnd: () => void }> = ({ onSessionEnd }) =>
   }
 
   return (
-    <div className="flex h-screen overflow-hidden transition-colors duration-300 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100">
+    <div className="app-shell flex overflow-hidden transition-colors duration-300 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100">
       <Sidebar
         user={user}
         currentView={currentView}
         unreadCount={unreadCount}
-        isOpen={isSidebarOpen}
         darkMode={darkMode}
         onNavigate={setCurrentView}
-        onClose={() => setIsSidebarOpen(false)}
         onToggleTheme={toggleTheme}
         onAddApplication={openAddModal}
         onSignOut={() => setShowLogoutConfirm(true)}
       />
 
-      <main className="flex-1 overflow-y-auto scroll-smooth dark:bg-slate-950 pb-16 lg:pb-0">
+      <main className="app-main min-w-0 min-h-0 flex-1 overflow-y-auto scroll-smooth dark:bg-slate-950">
         <Header
           currentView={currentView}
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
-          onOpenSidebar={() => setIsSidebarOpen(true)}
+          onAddApplication={openAddModal}
           onOpenSettings={() => setCurrentView("settings")}
         />
 
-        <div className="p-4 sm:p-8 max-w-7xl mx-auto">
+        <div className="app-content p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
           {isLoading ? (
             <div className="flex flex-col items-center justify-center h-[60vh] text-slate-400">
               <Loader2 size={40} className="animate-spin mb-4 text-emerald-500" />
@@ -286,7 +283,9 @@ const AppSession: React.FC<{ onSessionEnd: () => void }> = ({ onSessionEnd }) =>
         currentView={currentView}
         unreadCount={unreadCount}
         onNavigate={setCurrentView}
-        onAddApplication={openAddModal}
+        darkMode={darkMode}
+        onToggleTheme={toggleTheme}
+        onSignOut={() => setShowLogoutConfirm(true)}
       />
     </div>
   );
