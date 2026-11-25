@@ -10,6 +10,8 @@ import goalsRoutes from "./routes/goals";
 import messagesRoutes from "./routes/messages";
 import membersRoutes from "./routes/members";
 import eventsRoutes from "./routes/events";
+import notificationRoutes from "./routes/notifications";
+import { startNotificationWorker } from "./services/notificationWorker";
 import { errorHandler } from "./middleware/errorHandler";
 import { PORT, isOriginAllowed, validateConfig } from "./config";
 import { authLimiter, apiLimiter } from "./middleware/rateLimit";
@@ -48,6 +50,7 @@ app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
 
 // Apply rate limiters
 app.use("/auth", authLimiter, authRoutes);
+app.use("/api/notifications", apiLimiter, notificationRoutes);
 app.use("/api", apiLimiter, applicationRoutes);
 app.use("/api", apiLimiter, messagesRoutes);
 app.use("/api", apiLimiter, membersRoutes);
@@ -58,6 +61,8 @@ app.use("/api", apiLimiter, eventsRoutes);
 // Global error handler - must be last
 app.use(errorHandler);
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`API running on http://localhost:${PORT}`);
 });
+const stopNotifications = startNotificationWorker();
+server.on("close", stopNotifications);

@@ -20,6 +20,10 @@ model User {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   isActive        Boolean  @default(true)
+  pushFollowUps   Boolean  @default(true)
+  pushInterviews  Boolean  @default(true)
+  pushJobAdded    Boolean  @default(true)
+  pushJobUpdated  Boolean  @default(true)
 
   tenantUsers  TenantUser[]
   jobsCreated  Job[]    @relation("JobsCreatedBy")
@@ -30,6 +34,45 @@ model User {
   messagesSent Message[] @relation("MessageSender")
   invitesSent     TenantInvite[]   @relation("TenantInvitesSent")
   calendarEvents  CalendarEvent[]  @relation("CalendarEventsCreatedBy")
+  pushSubscriptions WebPushSubscription[]
+}
+
+model WebPushSubscription {
+  id             String   @id @default(uuid())
+  userId         String
+  endpoint       String   @unique
+  p256dh         String
+  auth           String
+  vapidPublicKey String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user       User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deliveries NotificationDelivery[]
+
+  @@index([userId])
+}
+
+model NotificationDelivery {
+  subscriptionId String
+  reminderKey    String
+  attemptedAt    DateTime?
+  sentAt         DateTime?
+  tenantId       String?
+  eventType      ApplicationNotificationType?
+  payload        Json?
+  createdAt      DateTime @default(now())
+
+  subscription WebPushSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  tenant       Tenant?             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@id([subscriptionId, reminderKey])
+  @@index([eventType, sentAt, createdAt])
+}
+
+enum ApplicationNotificationType {
+  JOB_ADDED
+  JOB_UPDATED
 }
 
 model PasswordResetToken {
@@ -57,6 +100,7 @@ model Tenant {
   conversations   Conversation[]
   invites         TenantInvite[]
   calendarEvents  CalendarEvent[]
+  notificationDeliveries NotificationDelivery[]
 }
 
 model TenantUser {

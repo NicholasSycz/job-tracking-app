@@ -4,6 +4,7 @@ import { AuthUser } from "../types";
 import { apiService } from "../services/apiService";
 import { useToast } from "../contexts/ToastContext";
 import { API_BASE_URL } from "../config";
+import { disablePush } from "../services/webPush";
 
 interface UseAuthOptions {
   /** Runs once the user is authenticated, to fetch their data. Must not reject. */
@@ -79,7 +80,8 @@ export function useAuth({ onAuthenticated }: UseAuthOptions) {
     [pendingInviteToken, acceptInviteToken]
   );
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    await disablePush();
     localStorage.removeItem("auth_token");
     localStorage.removeItem("tenant_id");
     setUser(null);

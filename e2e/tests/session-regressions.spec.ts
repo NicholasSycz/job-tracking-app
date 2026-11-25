@@ -27,6 +27,9 @@ async function mockSessionApi(page: Page, delayFirstAccount = false) {
     if (path === '/auth/login') return route.fulfill({ json: session(body.email.startsWith('b@') ? 'b' : 'a') });
     if (path === '/auth/me') return route.fulfill({ json: session(authorization === 'Bearer account-b' ? 'b' : 'a') });
     if (path === '/auth/reset-password') return route.fulfill({ json: { message: 'Password reset successfully.' } });
+    if (path === '/api/notifications/config') return route.fulfill({ json: {
+      configured: false, publicKey: null, preferences: { followUps: true, interviews: true, jobsAdded: true, jobsUpdated: true }, endpoints: [],
+    } });
 
     // Simulate a partial outage for the second user, leaving applications usable.
     if (authorization === 'Bearer account-b') {

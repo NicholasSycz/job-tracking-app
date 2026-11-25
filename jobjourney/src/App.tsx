@@ -61,7 +61,10 @@ const AppSession: React.FC<{ onSessionEnd: () => void }> = ({ onSessionEnd }) =>
     deleteEvent,
   } = useCalendarEvents();
 
-  const [currentView, setCurrentView] = useState<ViewType>("dashboard");
+  const [currentView, setCurrentView] = useState<ViewType>(() => {
+    const view = new URLSearchParams(window.location.search).get("view");
+    return view === "applications" || view === "calendar" ? view : "dashboard";
+  });
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingJob, setEditingJob] = useState<JobApplication | undefined>();
   const [searchQuery, setSearchQuery] = useState("");
@@ -147,10 +150,14 @@ const AppSession: React.FC<{ onSessionEnd: () => void }> = ({ onSessionEnd }) =>
 
   const closeModal = useCallback(() => setIsModalOpen(false), []);
 
-  const handleSignOut = useCallback(() => {
-    logout();
-    onSessionEnd();
-  }, [logout, onSessionEnd]);
+  const handleSignOut = useCallback(async () => {
+    try {
+      await logout();
+      onSessionEnd();
+    } catch (error) {
+      showError("Unable to sign out", error instanceof Error ? error.message : "Please try again.");
+    }
+  }, [logout, onSessionEnd, showError]);
 
   const openImportModal = useCallback(() => setIsImportModalOpen(true), []);
 
